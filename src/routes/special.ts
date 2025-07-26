@@ -154,12 +154,17 @@ export async function specialRoutes(fastify: FastifyInstance): Promise<void> {
           providerId,
           schedulesCreated: simulatedWeek.schedules.length,
           slotsCreated: simulatedWeek.slots.length,
-          schedules: simulatedWeek.schedules,
-          slots: simulatedWeek.slots.slice(0, 10) // Return first 10 slots as example
+          scheduleIds: simulatedWeek.schedules.map(s => s.id),
+          sampleSlots: simulatedWeek.slots.slice(0, 5).map(slot => ({
+            id: slot.id,
+            start: slot.start,
+            end: slot.end,
+            status: slot.status
+          }))
         }
       };
 
-      reply.code(200).send(response);
+      reply.code(200).type('application/json').send(JSON.stringify(response));
     } catch (error) {
       const outcome = createOperationOutcome('error', 'processing', `Simulation failed: ${(error as Error).message}`);
       reply.code(500).send(outcome);

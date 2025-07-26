@@ -13,6 +13,7 @@ import { scheduleRoutes } from './routes/schedule';
 import { slotRoutes } from './routes/slot';
 import { appointmentRoutes } from './routes/appointment';
 import { specialRoutes } from './routes/special';
+import { authPlugin } from './plugins/auth';
 
 const envSchema = {
   type: 'object',
@@ -133,45 +134,12 @@ async function buildApp(): Promise<FastifyInstance> {
     transformSpecificationClone: true
   });
 
-  // Authentication plugin (simple bearer token stub)
+  // Register authentication plugin
   if (process.env.ENABLE_AUTH === 'true') {
-    fastify.addHook('preHandler', async (request, reply) => {
-      // Skip auth for health, metadata, and docs endpoints
-      const publicPaths = ['/health', '/metadata', '/docs'];
-      if (publicPaths.some(path => request.url.startsWith(path))) {
-        return;
-      }
-
-      const authorization = request.headers.authorization;
-      if (!authorization || !authorization.startsWith('Bearer ')) {
-        reply.code(401).send({
-          resourceType: 'OperationOutcome',
-          issue: [{
-            severity: 'error',
-            code: 'login',
-            details: {
-              text: 'Authorization required'
-            }
-          }]
-        });
-        return;
-      }
-
-      // Simple token validation (stub)
-      const token = authorization.substring(7);
-      if (!token || token === 'invalid') {
-        reply.code(401).send({
-          resourceType: 'OperationOutcome',
-          issue: [{
-            severity: 'error',
-            code: 'login',
-            details: {
-              text: 'Invalid token'
-            }
-          }]
-        });
-        return;
-      }
+    await fastify.register(authPlugin, {
+      enabled: true,
+      tokenSecret: process.env.JWT_SECRET || 'demo-secret',
+      publicPaths: ['/health', '/metadata', '/docs', '/auth', '/']
     });
   }
 
