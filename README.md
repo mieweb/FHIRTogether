@@ -36,8 +36,6 @@ If you're working with a proprietary scheduling system that stores appointment d
 
 No need to re-architect your legacy system — just implement a backend adapter.
 
----
-
 ## 🚀 Quickstart
 
 ```bash
@@ -48,8 +46,6 @@ npm run dev
 ````
 
 Swagger UI: [http://localhost:3000/docs](http://localhost:3000/docs)
-
----
 
 ## 🧩 Pluggable Store Interface
 
@@ -98,8 +94,6 @@ POST /$hl7v2-ingest
 
 The server parses the message and converts it into FHIR `Slot` and `Schedule` resources internally.
 
----
-
 ## 📦 API Endpoints
 
 FHIR-compliant endpoints (all responses follow FHIR Bundles or resource schemas):
@@ -113,8 +107,6 @@ FHIR-compliant endpoints (all responses follow FHIR Bundles or resource schemas)
 | POST   | `/Appointment`   | Book an appointment              |
 | POST   | `/$hl7v2-ingest` | Ingest HL7v2 scheduling msg      |
 
----
-
 ## 🧪 Test Server Mode
 
 Endpoints also support administrative operations (in test mode only):
@@ -123,25 +115,17 @@ Endpoints also support administrative operations (in test mode only):
 * `DELETE /Schedule`
 * `POST /$simulate-week` — generate random provider availability
 
----
-
 ## 🔐 Auth (Optional)
 
 FHIR-style bearer token authentication is planned. You can stub in simple token-based headers using the `authPlugin`.
-
----
 
 ## 📄 License
 
 MIT
 
----
-
 ## 🤝 Contributing
 
 If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend drivers, or scheduler logic — PRs welcome!
-
----
 
 ## 🧭 Roadmap
 
@@ -157,9 +141,3 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 
 > Bring legacy scheduling infrastructure into the FHIR world — one appointment at a time.
 
-```
-
----
-
-Would you like this saved into a project scaffold or paired with working code to match?
-```
