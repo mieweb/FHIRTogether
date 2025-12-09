@@ -147,6 +147,10 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 * [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like Calend.ly.
 * [ ] Add login/authentication support for admins
 * [ ] Implement google/microsoft/apple login for the scheduling portal for end users
+* [ ] Implement the ability for an admin to define custom appointment types with different durations and constraints
+  - [ ] Admin UI for managing providers, appointment types, and schedules
+  - [ ] Implement yaml import/export for schedule definitions including API to update
+  
 * [ ] FHIR Subscription support for appointment updates
 * [ ] Add SMART-on-FHIR / OAuth support - review https://github.com/mieweb/poc-auth-architecture 
 * [ ] `$find-appointment` operation
