@@ -144,8 +144,11 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 
 ## 🧭 Roadmap
 
-* [ ] Add SMART-on-FHIR / OAuth support
+* [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like Calend.ly.
+* [ ] Add login/authentication support for admins
+* [ ] Implement google/microsoft/apple login for the scheduling portal for end users
 * [ ] FHIR Subscription support for appointment updates
+* [ ] Add SMART-on-FHIR / OAuth support - review https://github.com/mieweb/poc-auth-architecture 
 * [ ] `$find-appointment` operation
 * [ ] HL7v2 SRM^S03 request/response handling
 * [ ] FHIR Bulk Export for schedules
