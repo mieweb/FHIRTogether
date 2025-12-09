@@ -24,6 +24,21 @@
 - 🧪 Test mode for seeding schedules, clearing data, or simulating providers
 - ⚡ Fastify-based, modern TypeScript stack
 
+```mermaid
+flowchart LR
+  A[Legacy EHR]
+  B[FHIRTogether FHIR Server]
+  C[Scheduling Broker - BlueHive]
+  D[Users and Provider Apps]
+
+  A -->|HL7v2 SIU S13 S15| B
+  B -->|FHIR Schedule Slot Appointment| C
+  C -->|Book and Update via FHIR| B
+  B -->|HL7v2 ACK or Updates| A
+  D -->|Discover availability and request booking| C
+  C -->|Notifications and confirmations| D
+```
+
 ---
 
 ## 🛠 Use Case: Making Legacy Systems FHIR-Compliant
