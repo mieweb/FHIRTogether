@@ -7,6 +7,8 @@ import { SqliteStore } from './store/sqliteStore';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
+import { hl7Routes } from './routes/hl7Routes';
+import { createMLLPServer, MLLPServer } from './hl7/socket';
 
 // Load environment variables
 config();
@@ -14,6 +16,12 @@ config();
 const PORT = parseInt(process.env.PORT || '4010', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const STORE_BACKEND = process.env.STORE_BACKEND || 'sqlite';
+const HL7_SOCKET_PORT = parseInt(process.env.HL7_SOCKET_PORT || '2575', 10);
+const HL7_SOCKET_ENABLED = process.env.HL7_SOCKET_ENABLED !== 'false';
+const HL7_TLS_ENABLED = process.env.HL7_TLS_ENABLED === 'true';
+const HL7_TLS_KEY = process.env.HL7_TLS_KEY;
+const HL7_TLS_CERT = process.env.HL7_TLS_CERT;
+const HL7_TLS_CA = process.env.HL7_TLS_CA;
 
 async function buildServer() {
   const fastify = Fastify({
@@ -61,6 +69,7 @@ async function buildServer() {
         { name: 'Schedule', description: 'Provider schedule management' },
         { name: 'Slot', description: 'Time slot availability' },
         { name: 'Appointment', description: 'Appointment booking and management' },
+        { name: 'HL7', description: 'HL7v2 message ingestion' },
       ],
     },
   });
@@ -89,6 +98,7 @@ async function buildServer() {
     await scheduleRoutes(instance, store);
     await slotRoutes(instance, store);
     await appointmentRoutes(instance, store);
+    await hl7Routes(instance, store);
   });
 
   // Health check endpoint
@@ -112,8 +122,14 @@ async function buildServer() {
         schedule: '/Schedule',
         slot: '/Slot',
         appointment: '/Appointment',
+        hl7: '/hl7/siu',
+        hl7Status: '/hl7/status',
         health: '/health',
       },
+      hl7Socket: HL7_SOCKET_ENABLED ? {
+        port: HL7_SOCKET_PORT,
+        tls: HL7_TLS_ENABLED,
+      } : null,
     };
   });
 
@@ -128,13 +144,46 @@ async function buildServer() {
   process.on('SIGINT', () => closeGracefully('SIGINT'));
   process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 
-  return fastify;
+  return { fastify, store };
 }
 
 async function start() {
   try {
-    const fastify = await buildServer();
+    const { fastify, store } = await buildServer();
     await fastify.listen({ port: PORT, host: HOST });
+    
+    // Start MLLP socket server if enabled
+    let mllpServer: MLLPServer | null = null;
+    if (HL7_SOCKET_ENABLED) {
+      mllpServer = createMLLPServer(store, {
+        port: HL7_SOCKET_PORT,
+        host: HOST,
+        tls: HL7_TLS_ENABLED ? {
+          enabled: true,
+          key: HL7_TLS_KEY,
+          cert: HL7_TLS_CERT,
+          ca: HL7_TLS_CA,
+        } : undefined,
+      });
+      
+      mllpServer.on('listening', (info) => {
+        console.log(`📨 HL7 MLLP Socket: ${info.tls ? 'tls' : 'tcp'}://${info.host}:${info.port}`);
+      });
+      
+      mllpServer.on('error', (err) => {
+        console.error('MLLP Server error:', err);
+      });
+      
+      mllpServer.on('message', (event) => {
+        fastify.log.info({ messageType: event.parsed.messageType, controlId: event.parsed.controlId }, 'HL7 message received via socket');
+      });
+      
+      mllpServer.on('processed', (info) => {
+        fastify.log.info(info, 'HL7 message processed');
+      });
+      
+      await mllpServer.start();
+    }
     
     console.log('\n🚀 FHIRTogether Scheduling Synapse');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -142,7 +191,27 @@ async function start() {
     console.log(`📚 API Documentation: http://localhost:${PORT}/docs`);
     console.log(`💾 Store Backend: ${STORE_BACKEND}`);
     console.log(`🧪 Test Endpoints: ${process.env.ENABLE_TEST_ENDPOINTS === 'true' ? 'Enabled' : 'Disabled'}`);
+    if (HL7_SOCKET_ENABLED) {
+      console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
+    }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+    
+    // Update graceful shutdown to include MLLP server
+    process.removeAllListeners('SIGINT');
+    process.removeAllListeners('SIGTERM');
+    
+    const closeAll = async (signal: string) => {
+      fastify.log.info(`Received signal ${signal}, closing gracefully...`);
+      if (mllpServer) {
+        await mllpServer.stop();
+      }
+      await store.close();
+      await fastify.close();
+      process.exit(0);
+    };
+    
+    process.on('SIGINT', () => closeAll('SIGINT'));
+    process.on('SIGTERM', () => closeAll('SIGTERM'));
     
   } catch (err) {
     console.error('Error starting server:', err);

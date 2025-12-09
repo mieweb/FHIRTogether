@@ -1,0 +1,380 @@
+/**
+ * HL7 Routes
+ * 
+ * HTTP endpoints for receiving HL7v2 messages over HTTPS.
+ * Supports raw HL7 message submission and returns ACK responses.
+ */
+
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { FhirStore } from '../types/fhir';
+import {
+  parseSIUMessage,
+  parseRawMessage,
+  buildACKMessage,
+  createACKResponse,
+  wrapMLLP,
+} from '../hl7/parser';
+import { siuToFhirResources } from '../hl7/converter';
+
+/**
+ * HL7 message request body interface
+ */
+interface HL7MessageRequest {
+  message: string;
+  wrapMLLP?: boolean;
+}
+
+/**
+ * Register HL7 routes
+ */
+export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
+  /**
+   * POST /hl7/siu - Receive SIU scheduling message
+   * 
+   * Accepts HL7v2 SIU messages and converts them to FHIR resources.
+   * Returns ACK message.
+   */
+  fastify.post<{
+    Body: HL7MessageRequest | string;
+  }>('/hl7/siu', {
+    schema: {
+      description: 'Receive HL7v2 SIU scheduling message',
+      tags: ['HL7'],
+      body: {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              message: { type: 'string', description: 'Raw HL7 message' },
+              wrapMLLP: { type: 'boolean', description: 'Whether to wrap response in MLLP framing' },
+            },
+            required: ['message'],
+          },
+          {
+            type: 'string',
+            description: 'Raw HL7 message as plain text',
+          },
+        ],
+      },
+      response: {
+        200: {
+          description: 'ACK response',
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            ack: { type: 'string', description: 'HL7 ACK message' },
+            status: { type: 'string', description: 'Processing status' },
+            appointmentId: { type: 'string', description: 'Created/updated appointment ID' },
+            action: { type: 'string', description: 'Action performed' },
+          },
+        },
+        400: {
+          description: 'Error response',
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            ack: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (request: FastifyRequest<{ Body: HL7MessageRequest | string }>, reply: FastifyReply) => {
+    try {
+      // Extract raw message from body
+      let rawMessage: string;
+      let wrapResponse = false;
+      
+      if (typeof request.body === 'string') {
+        rawMessage = request.body;
+      } else {
+        rawMessage = request.body.message;
+        wrapResponse = request.body.wrapMLLP || false;
+      }
+      
+      // Parse the raw message first to validate and get control ID
+      const parsed = parseRawMessage(rawMessage);
+      
+      // Verify it's a SIU message
+      if (parsed.messageType !== 'SIU') {
+        const ack = createACKResponse(
+          {
+            segmentType: 'MSH',
+            encodingCharacters: '^~\\&',
+            sendingApplication: 'UNKNOWN',
+            sendingFacility: 'UNKNOWN',
+            receivingApplication: 'FHIRTOGETHER',
+            receivingFacility: 'SCHEDULING_GATEWAY',
+            dateTimeOfMessage: '',
+            messageType: { messageCode: parsed.messageType || 'UNK', triggerEvent: '' },
+            messageControlId: parsed.controlId || 'UNKNOWN',
+            processingId: 'P',
+            versionId: '2.3',
+          },
+          'AE',
+          `Unsupported message type: ${parsed.messageType}. Expected SIU.`,
+          { code: '200', text: 'Unsupported message type', severity: 'E' }
+        );
+        
+        let ackMessage = buildACKMessage(ack);
+        if (wrapResponse) {
+          ackMessage = wrapMLLP(ackMessage);
+        }
+        
+        return reply.status(400).send({
+          error: `Unsupported message type: ${parsed.messageType}`,
+          ack: ackMessage,
+        });
+      }
+      
+      // Parse the full SIU message
+      const siuMessage = parseSIUMessage(rawMessage);
+      
+      // Convert to FHIR resources
+      const fhirResult = siuToFhirResources(siuMessage);
+      
+      // Process based on action type
+      let appointmentId: string | undefined;
+      
+      try {
+        // Ensure schedule exists
+        const existingSchedules = await store.getSchedules({
+          actor: `Practitioner/${fhirResult.schedule.id?.replace('schedule-', '')}`,
+        });
+        
+        let scheduleId: string;
+        if (existingSchedules.length === 0) {
+          const createdSchedule = await store.createSchedule(fhirResult.schedule);
+          scheduleId = createdSchedule.id!;
+        } else {
+          scheduleId = existingSchedules[0].id!;
+        }
+        
+        // Handle appointment based on action
+        const placerApptId = siuMessage.sch.placerAppointmentId?.idNumber;
+        
+        if (fhirResult.action === 'create') {
+          // Create new appointment
+          const createdAppointment = await store.createAppointment(fhirResult.appointment);
+          appointmentId = createdAppointment.id;
+          
+          // Create slot if provided
+          if (fhirResult.slot) {
+            fhirResult.slot.schedule.reference = `Schedule/${scheduleId}`;
+            await store.createSlot(fhirResult.slot);
+          }
+        } else {
+          // Try to find existing appointment by identifier
+          let existingAppointment = null;
+          if (placerApptId) {
+            const appointments = await store.getAppointments({});
+            existingAppointment = appointments.find(apt => 
+              apt.identifier?.some(id => id.value === placerApptId)
+            );
+          }
+          
+          if (existingAppointment) {
+            // Update existing appointment
+            const updatedAppointment = await store.updateAppointment(
+              existingAppointment.id!,
+              fhirResult.appointment
+            );
+            appointmentId = updatedAppointment.id;
+          } else {
+            // Create new if not found (for updates to unknown appointments)
+            const createdAppointment = await store.createAppointment(fhirResult.appointment);
+            appointmentId = createdAppointment.id;
+          }
+        }
+        
+        // Create success ACK
+        const ack = createACKResponse(siuMessage.msh, 'AA', 'Message processed successfully');
+        let ackMessage = buildACKMessage(ack);
+        if (wrapResponse) {
+          ackMessage = wrapMLLP(ackMessage);
+        }
+        
+        return reply.send({
+          ack: ackMessage,
+          status: 'success',
+          appointmentId,
+          action: fhirResult.action,
+        });
+        
+      } catch (storeError) {
+        // Database/store error
+        const ack = createACKResponse(
+          siuMessage.msh,
+          'AE',
+          `Error processing message: ${storeError instanceof Error ? storeError.message : 'Unknown error'}`,
+          { code: '207', text: 'Application internal error', severity: 'E' }
+        );
+        
+        let ackMessage = buildACKMessage(ack);
+        if (wrapResponse) {
+          ackMessage = wrapMLLP(ackMessage);
+        }
+        
+        return reply.status(500).send({
+          error: `Store error: ${storeError instanceof Error ? storeError.message : 'Unknown error'}`,
+          ack: ackMessage,
+        });
+      }
+      
+    } catch (parseError) {
+      // Parse error
+      fastify.log.error({ error: parseError }, 'Error parsing HL7 message');
+      
+      const ack = createACKResponse(
+        {
+          segmentType: 'MSH',
+          encodingCharacters: '^~\\&',
+          sendingApplication: 'UNKNOWN',
+          sendingFacility: 'UNKNOWN',
+          receivingApplication: 'FHIRTOGETHER',
+          receivingFacility: 'SCHEDULING_GATEWAY',
+          dateTimeOfMessage: '',
+          messageType: { messageCode: 'UNK', triggerEvent: '' },
+          messageControlId: 'UNKNOWN',
+          processingId: 'P',
+          versionId: '2.3',
+        },
+        'AR',
+        `Error parsing message: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+        { code: '100', text: 'Segment sequence error', severity: 'E' }
+      );
+      
+      return reply.status(400).send({
+        error: `Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
+        ack: buildACKMessage(ack),
+      });
+    }
+  });
+
+  /**
+   * POST /hl7/raw - Receive any HL7 message (raw endpoint)
+   * 
+   * Accepts raw HL7 messages with content-type: x-application/hl7-v2+er7
+   */
+  fastify.post('/hl7/raw', {
+    schema: {
+      description: 'Receive raw HL7v2 message',
+      tags: ['HL7'],
+      consumes: ['x-application/hl7-v2+er7', 'text/plain', 'application/json'],
+      response: {
+        200: {
+          description: 'ACK response',
+          type: 'string',
+        },
+      },
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      let rawMessage: string;
+      
+      // Handle different content types
+      const contentType = request.headers['content-type'] || '';
+      
+      if (contentType.includes('hl7') || contentType.includes('text/plain')) {
+        rawMessage = request.body as string;
+      } else if (typeof request.body === 'object' && request.body !== null) {
+        rawMessage = (request.body as any).message || JSON.stringify(request.body);
+      } else {
+        rawMessage = String(request.body);
+      }
+      
+      const parsed = parseRawMessage(rawMessage);
+      
+      // Route to appropriate handler based on message type
+      if (parsed.messageType === 'SIU') {
+        // Redirect internally to SIU handler
+        const result = await fastify.inject({
+          method: 'POST',
+          url: '/hl7/siu',
+          payload: { message: rawMessage },
+        });
+        
+        const body = JSON.parse(result.body);
+        reply.header('Content-Type', 'x-application/hl7-v2+er7');
+        return reply.status(result.statusCode).send(body.ack);
+      }
+      
+      // Unsupported message type
+      const ack = createACKResponse(
+        {
+          segmentType: 'MSH',
+          encodingCharacters: '^~\\&',
+          sendingApplication: 'UNKNOWN',
+          sendingFacility: 'UNKNOWN',
+          receivingApplication: 'FHIRTOGETHER',
+          receivingFacility: 'SCHEDULING_GATEWAY',
+          dateTimeOfMessage: '',
+          messageType: { messageCode: parsed.messageType || 'UNK', triggerEvent: parsed.triggerEvent || '' },
+          messageControlId: parsed.controlId || 'UNKNOWN',
+          processingId: 'P',
+          versionId: '2.3',
+        },
+        'AE',
+        `Unsupported message type: ${parsed.messageType}`,
+        { code: '200', text: 'Unsupported message type', severity: 'E' }
+      );
+      
+      reply.header('Content-Type', 'x-application/hl7-v2+er7');
+      return reply.status(400).send(buildACKMessage(ack));
+      
+    } catch (error) {
+      fastify.log.error({ error }, 'Error processing raw HL7 message');
+      
+      const ack = createACKResponse(
+        {
+          segmentType: 'MSH',
+          encodingCharacters: '^~\\&',
+          sendingApplication: 'UNKNOWN',
+          sendingFacility: 'UNKNOWN',
+          receivingApplication: 'FHIRTOGETHER',
+          receivingFacility: 'SCHEDULING_GATEWAY',
+          dateTimeOfMessage: '',
+          messageType: { messageCode: 'UNK', triggerEvent: '' },
+          messageControlId: 'UNKNOWN',
+          processingId: 'P',
+          versionId: '2.3',
+        },
+        'AR',
+        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        { code: '100', text: 'Segment sequence error', severity: 'E' }
+      );
+      
+      reply.header('Content-Type', 'x-application/hl7-v2+er7');
+      return reply.status(400).send(buildACKMessage(ack));
+    }
+  });
+
+  /**
+   * GET /hl7/status - Health check for HL7 endpoint
+   */
+  fastify.get('/hl7/status', {
+    schema: {
+      description: 'HL7 endpoint status',
+      tags: ['HL7'],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' },
+            supportedMessages: { type: 'array', items: { type: 'string' } },
+            endpoints: { type: 'object' },
+          },
+        },
+      },
+    },
+  }, async () => {
+    return {
+      status: 'healthy',
+      supportedMessages: ['SIU^S12', 'SIU^S13', 'SIU^S14', 'SIU^S15', 'SIU^S17', 'SIU^S26'],
+      endpoints: {
+        https: '/hl7/siu',
+        raw: '/hl7/raw',
+        socket: `Port ${process.env.HL7_SOCKET_PORT || '2575'}`,
+      },
+    };
+  });
+}
