@@ -269,6 +269,29 @@ The module returns appropriate HL7 ACK codes:
 3. **Input Validation**: All HL7 messages are validated before processing
 4. **Audit Logging**: Message processing is logged for compliance
 
+## Design Decisions
+
+### Why Custom Parser Instead of `hl7-standard` npm?
+
+We evaluated existing HL7 npm packages and chose a custom implementation for these reasons:
+
+1. **`hl7-standard` is schema-only** - It provides HL7 segment definitions and validation schemas but doesn't include a message parser or builder. We'd still need to write the parsing logic.
+
+2. **Lightweight & Focused** - Our implementation only needs SIU messages (scheduling). A full HL7 library includes definitions for 200+ message types. Our parser is ~800 lines vs a larger dependency tree.
+
+3. **Direct FHIR Integration** - The custom converter maps directly to our existing FHIR types (`Appointment`, `Slot`, `Schedule`). A generic library would require an additional mapping layer.
+
+4. **MLLP Support** - Most npm HL7 packages don't include MLLP socket handling. We'd still need to build the TCP/TLS server ourselves.
+
+| Package | Issue |
+|---------|-------|
+| `hl7-standard` | Schema only, no parser |
+| `hl7` | Abandoned (last update 2017) |
+| `node-hl7-complete` | Heavy, includes whole HL7 v2 spec |
+| `simple-hl7` | Basic, no TypeScript types |
+
+**When to reconsider**: If FHIRTogether needs to support many HL7 message types beyond SIU (ADT, ORM, ORU, etc.), adopting a comprehensive library with adapters would make sense.
+
 ## References
 
 - [HL7 v2.x Standard](https://www.hl7.org/implement/standards/product_brief.cfm?product_id=185)
