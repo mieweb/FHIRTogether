@@ -60,7 +60,7 @@ npm install
 npm run dev
 ````
 
-Swagger UI: [http://localhost:3000/docs](http://localhost:3000/docs)
+Swagger UI: [http://localhost:4010/docs](http://localhost:4010/docs)
 
 ## 🧩 Pluggable Store Interface
 

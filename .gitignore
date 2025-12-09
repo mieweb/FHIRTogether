@@ -137,3 +137,38 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# ===========================================
+# FHIRTogether Project Specific
+# ===========================================
+
+# SQLite database files
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Compiled TypeScript output
+dist/
+
+# macOS system files
+.DS_Store
+**/.DS_Store
+
+# IDE and editor files
+.idea/
+*.swp
+*.swo
+*~
+
+# Test artifacts
+test-results/
+playwright-report/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

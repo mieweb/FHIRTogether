@@ -1,0 +1,42 @@
+{
+  "name": "fhirtogether-scheduling-synapse",
+  "version": "1.0.0",
+  "description": "FHIR-compliant gateway and test server for schedule and appointment availability",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "generate-data": "tsx src/examples/generateBusyOffice.ts",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "fhir",
+    "hl7",
+    "scheduling",
+    "appointments",
+    "healthcare"
+  ],
+  "author": "MieWeb",
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/cors": "^8.5.0",
+    "@fastify/swagger": "^8.14.0",
+    "@fastify/swagger-ui": "^2.1.0",
+    "fastify": "^4.25.2",
+    "better-sqlite3": "^9.2.2",
+    "dotenv": "^16.3.1",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
