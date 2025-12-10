@@ -159,7 +159,7 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 
 ## 🧭 Roadmap
 
-* [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like Calend.ly.
+* [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like https://cal.com/ or Calend.ly.
 * [ ] Add login/authentication support for admins
 * [ ] Implement google/microsoft/apple login for the scheduling portal for end users
 * [ ] Implement the ability for an admin to define custom appointment types with different durations and constraints
