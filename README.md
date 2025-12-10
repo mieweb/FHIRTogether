@@ -64,7 +64,22 @@ Swagger UI: [http://localhost:4010/docs](http://localhost:4010/docs)
 
 ## 🧩 Pluggable Store Interface
 
-To integrate with your system, implement the `FhirStore` interface:
+**Important:** The store interface is **not** for connecting directly to your EHR or Practice Management system. Instead, it's a **working data repository** for the scheduling portal that holds appointment data representing schedules for providers/resources.
+
+### Understanding the Store
+
+The store you select is:
+- ✅ A **storage system you're comfortable with** (SQLite, PostgreSQL, MySQL, MongoDB, etc.)
+- ✅ A **working cache** that syncs FROM your EHR or PM system
+- ✅ Used to **hold appointment scheduling data** for fast queries and updates
+- ❌ **NOT the source of truth** — your EHR/PM system remains authoritative
+- ❌ **NOT a direct database connection** to your production EHR/PM
+
+This architecture allows the scheduling portal to provide fast, responsive scheduling while keeping your source system's data isolated and protected.
+
+### Implementing a Store Backend
+
+To integrate with your preferred storage system, implement the `FhirStore` interface:
 
 ```ts
 interface FhirStore {
