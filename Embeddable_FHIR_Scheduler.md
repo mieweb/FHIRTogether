@@ -512,7 +512,7 @@ function BookingForm({ questionnaireFormData, onQuestionnaireChange }) {
 
 ### Phase 3: Booking Flow ✅
 - [x] Create BookingForm with patient info fields
-- [ ] Integrate QuestionnaireRenderer (placeholder added)
+- [ ] Integrate QuestionnaireRenderer (placeholder added) using https://github.com/mieweb/questionnaire-builder/
 - [x] Implement booking submission with hold validation
 - [x] Build Confirmation component
 
@@ -522,6 +522,37 @@ function BookingForm({ questionnaireFormData, onQuestionnaireChange }) {
 - [x] Add Playwright E2E test scaffolding
 - [ ] Write comprehensive tests
 - [ ] Publish to npm
+
+### Phase 5: Identity Management
+
+> 📖 See [AUTH.md](packages/fhir-scheduler/docs/AUTH.md) for complete documentation.
+
+- [ ] **Auth mode support** — `anonymous`, `token`, `callback`, `smart` modes
+- [ ] **Token injection**
+  - [ ] Accept static `accessToken` prop
+  - [ ] Support `getAccessToken()` async refresh function
+  - [ ] Auto-attach Bearer token to FHIR requests
+- [ ] **Anonymous booking with verification**
+  - [ ] Email verification flow (send/verify callbacks)
+  - [ ] SMS verification via host-provided gateway
+  - [ ] Optional CAPTCHA integration
+- [ ] **Identity callback pattern**
+  - [ ] `onIdentityRequired` hook for host-controlled auth
+  - [ ] Support OAuth popup/redirect flows
+  - [ ] Handle auth cancellation gracefully
+- [ ] **Pre-populated user info**
+  - [ ] Accept `user` prop with known identity
+  - [ ] Skip patient info fields if verified user provided
+  - [ ] Link to existing FHIR Patient resource
+- [ ] **SMART on FHIR launch** (optional)
+  - [ ] EHR launch context support
+  - [ ] Standalone launch with authorization
+  - [ ] Token refresh handling
+- [ ] **Post-booking notifications**
+  - [ ] Calendar integration (Google Calendar, Outlook) via email
+  - [ ] SMS reminders via host-provided gateway
+  - [ ] Cancelation/reschedule links
+
 
 ---
 
