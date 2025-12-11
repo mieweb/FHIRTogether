@@ -30,7 +30,8 @@
     "lint": "eslint src --ext .ts,.tsx",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:headed": "playwright test --headed"
+    "test:headed": "playwright test --headed",
+    "screenshots": "playwright test tests/screenshots.spec.ts"
   },
   "keywords": [
     "fhir",

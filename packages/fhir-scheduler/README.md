@@ -2,6 +2,34 @@
 
 A React component for browsing provider schedules and booking appointments, embeddable in any application.
 
+## Screenshots
+
+### Provider Selection
+![Provider List](docs/screenshots/01-provider-list.png)
+
+### Date Selection with Availability
+![Date Selection](docs/screenshots/02-date-selection.png)
+
+### Calendar View
+![Calendar View](docs/screenshots/03-calendar-view.png)
+
+### Time Slot Selection
+![Time Slots](docs/screenshots/04-time-slots.png)
+
+### Booking Form with Hold Timer
+![Booking Form](docs/screenshots/05-booking-form.png)
+
+### Completed Form
+![Booking Filled](docs/screenshots/06-booking-filled.png)
+
+### Confirmation
+![Confirmation](docs/screenshots/07-confirmation.png)
+
+### Mobile Responsive
+| Provider List | Booking Form |
+|---------------|--------------|
+| ![Mobile Providers](docs/screenshots/08-mobile-provider-list.png) | ![Mobile Booking](docs/screenshots/09-mobile-booking.png) |
+
 ## Features
 
 - 📅 Browse provider availability from any FHIR-compliant server
