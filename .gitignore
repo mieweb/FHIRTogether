@@ -168,6 +168,9 @@ dist/
 test-results/
 playwright-report/
 
+# Playwright MCP configuration
+.playwright-mcp/
+
 # Temporary files
 tmp/
 temp/
