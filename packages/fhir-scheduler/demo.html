@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FHIR Scheduler Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: rgba(255,255,255,0.8);
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    #scheduler-container {
+      background: white;
+      border-radius: 1rem;
+      padding: 2rem;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    }
+    .demo-note {
+      background: rgba(255,255,255,0.1);
+      color: white;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-top: 2rem;
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🗓️ FHIR Scheduler Widget</h1>
+    <p class="subtitle">Embeddable appointment scheduling component</p>
+    
+    <div id="scheduler-container">
+      <div id="app"></div>
+    </div>
+    
+    <div class="demo-note">
+      <strong>Demo:</strong> This widget connects to the local FHIRTogether server at localhost:4010.
+      Make sure to run <code>npm run generate-data</code> to populate test providers and slots.
+    </div>
+  </div>
+
+  <script type="module">
+    import React from 'https://esm.sh/react@18';
+    import ReactDOM from 'https://esm.sh/react-dom@18/client';
+    import { create } from 'https://esm.sh/zustand@4';
+
+    // Inline styles (from scheduler.css)
+    const styles = `
+      .fs-scheduler-widget {
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #111827;
+      }
+      .fs-section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        color: #111827;
+      }
+      .fs-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 0;
+      }
+      .fs-loading-spinner {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .fs-spinner {
+        width: 2.5rem;
+        height: 2.5rem;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .fs-spinner-track { stroke: #e5e7eb; }
+      .fs-spinner-head { stroke: #2563eb; }
+      .fs-loading-text { color: #4b5563; font-size: 0.875rem; }
+      .fs-empty { padding: 3rem 0; text-align: center; }
+      .fs-empty-message { color: #6b7280; }
+      .fs-provider-list { display: flex; flex-direction: column; gap: 1rem; }
+      .fs-provider-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      }
+      .fs-provider-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-align: left;
+        width: 100%;
+      }
+      .fs-provider-card:hover {
+        border-color: #60a5fa;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .fs-provider-avatar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        background-color: #dbeafe;
+        flex-shrink: 0;
+      }
+      .fs-avatar-initials { color: #1d4ed8; font-weight: 600; font-size: 1.125rem; }
+      .fs-provider-info { flex: 1; min-width: 0; }
+      .fs-provider-name { font-weight: 500; color: #111827; margin: 0; }
+      .fs-provider-specialty { font-size: 0.875rem; color: #4b5563; margin: 0.25rem 0 0; }
+      .fs-status-badge { padding: 0.25rem 0.5rem; font-size: 0.75rem; font-weight: 500; border-radius: 9999px; }
+      .fs-status-active { background-color: #dcfce7; color: #166534; }
+      .fs-back-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: #4b5563;
+        font-size: 0.875rem;
+        font-weight: 500;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0;
+      }
+      .fs-back-button:hover { color: #111827; }
+      .fs-icon { width: 1.25rem; height: 1.25rem; }
+      .fs-slot-calendar { display: flex; flex-direction: column; gap: 1.5rem; }
+      .fs-calendar-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+      .fs-calendar-title { font-size: 1.25rem; font-weight: 600; color: #111827; margin: 0; }
+      .fs-date-picker { display: flex; flex-direction: column; gap: 0.75rem; }
+      .fs-subsection-title { font-size: 1.125rem; font-weight: 500; margin-bottom: 0.75rem; color: #1f2937; }
+      .fs-date-grid {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+      }
+      .fs-date-option {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        min-width: 60px;
+        border-radius: 0.5rem;
+        border: 1px solid #e5e7eb;
+        background-color: #ffffff;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .fs-date-option:hover { border-color: #60a5fa; background-color: #eff6ff; }
+      .fs-date-option.fs-selected { background-color: #2563eb; border-color: #2563eb; color: #ffffff; }
+      .fs-day-name { font-size: 0.75rem; font-weight: 500; text-transform: uppercase; }
+      .fs-day-number { font-size: 1.125rem; font-weight: 600; }
+      .fs-time-slots { display: flex; flex-direction: column; gap: 1rem; }
+      .fs-loading-slots, .fs-no-slots { padding: 2rem 0; text-align: center; color: #6b7280; }
+      .fs-slot-groups { display: flex; flex-direction: column; gap: 1.5rem; }
+      .fs-slot-group { display: flex; flex-direction: column; gap: 0.5rem; }
+      .fs-period-label { font-size: 0.875rem; font-weight: 500; color: #374151; margin: 0; }
+      .fs-slot-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .fs-slot-button {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #111827;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .fs-slot-button:hover { border-color: #60a5fa; background-color: #eff6ff; }
+      .fs-error-message {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 0.5rem;
+        color: #b91c1c;
+        font-size: 0.875rem;
+      }
+    `;
+
+    // Inject styles
+    const styleEl = document.createElement('style');
+    styleEl.textContent = styles;
+    document.head.appendChild(styleEl);
+
+    const FHIR_BASE_URL = 'http://localhost:4010';
+
+    // Simple store
+    const useStore = create((set, get) => ({
+      step: 'providers',
+      providers: [],
+      slots: [],
+      selectedProvider: null,
+      selectedDate: null,
+      loading: false,
+      error: null,
+
+      fetchProviders: async () => {
+        set({ loading: true, error: null });
+        try {
+          const res = await fetch(`${FHIR_BASE_URL}/Schedule?active=true`);
+          const bundle = await res.json();
+          const providers = bundle.entry?.map(e => e.resource) || [];
+          set({ providers, loading: false });
+        } catch (err) {
+          set({ error: 'Failed to load providers', loading: false });
+        }
+      },
+
+      selectProvider: (provider) => {
+        set({ selectedProvider: provider, step: 'calendar', slots: [], selectedDate: null });
+      },
+
+      fetchSlots: async (date) => {
+        const { selectedProvider } = get();
+        if (!selectedProvider) return;
+        set({ loading: true, selectedDate: date });
+        try {
+          const start = `${date}T00:00:00Z`;
+          const end = `${date}T23:59:59Z`;
+          const res = await fetch(`${FHIR_BASE_URL}/Slot?schedule=Schedule/${selectedProvider.id}&status=free&start=ge${start}&end=le${end}`);
+          const bundle = await res.json();
+          const slots = bundle.entry?.map(e => e.resource) || [];
+          set({ slots, loading: false });
+        } catch (err) {
+          set({ error: 'Failed to load slots', loading: false });
+        }
+      },
+
+      goBack: () => {
+        const { step } = get();
+        if (step === 'calendar') {
+          set({ step: 'providers', selectedProvider: null });
+        }
+      }
+    }));
+
+    // Components
+    function ProviderList() {
+      const { providers, loading, fetchProviders, selectProvider } = useStore();
+      
+      React.useEffect(() => {
+        if (providers.length === 0) fetchProviders();
+      }, []);
+
+      if (loading) {
+        return React.createElement('div', { className: 'fs-loading' },
+          React.createElement('div', { className: 'fs-loading-spinner' },
+            React.createElement('svg', { className: 'fs-spinner', viewBox: '0 0 24 24' },
+              React.createElement('circle', { className: 'fs-spinner-track', cx: 12, cy: 12, r: 10, fill: 'none', strokeWidth: 3 }),
+              React.createElement('circle', { className: 'fs-spinner-head', cx: 12, cy: 12, r: 10, fill: 'none', strokeWidth: 3, strokeDasharray: 31.4, strokeDashoffset: 23.5 })
+            ),
+            React.createElement('span', { className: 'fs-loading-text' }, 'Loading providers...')
+          )
+        );
+      }
+
+      if (providers.length === 0) {
+        return React.createElement('div', { className: 'fs-empty' },
+          React.createElement('p', { className: 'fs-empty-message' }, 'No providers available. Run "npm run generate-data" to create test data.')
+        );
+      }
+
+      return React.createElement('div', { className: 'fs-provider-list' },
+        React.createElement('h2', { className: 'fs-section-title' }, 'Select a Provider'),
+        React.createElement('div', { className: 'fs-provider-grid' },
+          providers.map(p => {
+            const name = p.actor?.[0]?.display || p.id;
+            const specialty = p.specialty?.[0]?.text || p.specialty?.[0]?.coding?.[0]?.display;
+            const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+            
+            return React.createElement('button', {
+              key: p.id,
+              className: 'fs-provider-card',
+              onClick: () => selectProvider(p)
+            },
+              React.createElement('div', { className: 'fs-provider-avatar' },
+                React.createElement('span', { className: 'fs-avatar-initials' }, initials)
+              ),
+              React.createElement('div', { className: 'fs-provider-info' },
+                React.createElement('h3', { className: 'fs-provider-name' }, name),
+                specialty && React.createElement('p', { className: 'fs-provider-specialty' }, specialty)
+              ),
+              React.createElement('span', { className: 'fs-status-badge fs-status-active' }, 'Available')
+            );
+          })
+        )
+      );
+    }
+
+    function SlotCalendar() {
+      const { selectedProvider, slots, selectedDate, loading, fetchSlots, goBack } = useStore();
+      
+      const dates = React.useMemo(() => {
+        const result = [];
+        const today = new Date();
+        for (let i = 0; i < 14; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() + i);
+          result.push(d.toISOString().split('T')[0]);
+        }
+        return result;
+      }, []);
+
+      const groupedSlots = React.useMemo(() => {
+        const groups = { morning: [], afternoon: [], evening: [] };
+        for (const slot of slots) {
+          const hour = new Date(slot.start).getHours();
+          if (hour < 12) groups.morning.push(slot);
+          else if (hour < 17) groups.afternoon.push(slot);
+          else groups.evening.push(slot);
+        }
+        return groups;
+      }, [slots]);
+
+      const providerName = selectedProvider?.actor?.[0]?.display || 'Provider';
+
+      const formatTime = (iso) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+      return React.createElement('div', { className: 'fs-slot-calendar' },
+        React.createElement('header', { className: 'fs-calendar-header' },
+          React.createElement('button', { className: 'fs-back-button', onClick: goBack },
+            React.createElement('svg', { className: 'fs-icon', viewBox: '0 0 24 24' },
+              React.createElement('path', { d: 'M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z', fill: 'currentColor' })
+            ),
+            'Back'
+          ),
+          React.createElement('h2', { className: 'fs-calendar-title' }, `Schedule with ${providerName}`)
+        ),
+        React.createElement('section', { className: 'fs-date-picker' },
+          React.createElement('h3', { className: 'fs-subsection-title' }, 'Select a Date'),
+          React.createElement('div', { className: 'fs-date-grid' },
+            dates.map(date => {
+              const d = new Date(date + 'T00:00:00');
+              const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+              const dayNum = d.getDate();
+              const isSelected = date === selectedDate;
+              return React.createElement('button', {
+                key: date,
+                className: `fs-date-option ${isSelected ? 'fs-selected' : ''}`,
+                onClick: () => fetchSlots(date)
+              },
+                React.createElement('span', { className: 'fs-day-name' }, dayName),
+                React.createElement('span', { className: 'fs-day-number' }, dayNum)
+              );
+            })
+          )
+        ),
+        selectedDate && React.createElement('section', { className: 'fs-time-slots' },
+          React.createElement('h3', { className: 'fs-subsection-title' }, 
+            new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+          ),
+          loading ? React.createElement('div', { className: 'fs-loading-slots' }, 'Loading times...') :
+          slots.length === 0 ? React.createElement('div', { className: 'fs-no-slots' }, 'No available times for this date.') :
+          React.createElement('div', { className: 'fs-slot-groups' },
+            Object.entries(groupedSlots).map(([period, periodSlots]) => {
+              if (periodSlots.length === 0) return null;
+              const label = period === 'morning' ? '🌅 Morning' : period === 'afternoon' ? '☀️ Afternoon' : '🌙 Evening';
+              return React.createElement('div', { key: period, className: 'fs-slot-group' },
+                React.createElement('h4', { className: 'fs-period-label' }, label),
+                React.createElement('div', { className: 'fs-slot-grid' },
+                  periodSlots.map(slot => React.createElement('button', {
+                    key: slot.id,
+                    className: 'fs-slot-button',
+                    onClick: () => alert(`Selected: ${formatTime(slot.start)}\n\nIn the full widget, this would proceed to the booking form.`)
+                  }, formatTime(slot.start)))
+                )
+              );
+            })
+          )
+        )
+      );
+    }
+
+    function App() {
+      const { step, error } = useStore();
+      
+      return React.createElement('div', { className: 'fs-scheduler-widget' },
+        error && React.createElement('div', { className: 'fs-error-message' }, error),
+        step === 'providers' && React.createElement(ProviderList),
+        step === 'calendar' && React.createElement(SlotCalendar)
+      );
+    }
+
+    // Render
+    const root = ReactDOM.createRoot(document.getElementById('app'));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html>

@@ -25,7 +25,6 @@ export async function scheduleRoutes(fastify: FastifyInstance, store: FhirStore)
         response: {
           200: {
             type: 'object', additionalProperties: true,
-            additionalProperties: true,
             description: 'FHIR Bundle with Schedule resources',
           },
         },
@@ -65,7 +64,6 @@ export async function scheduleRoutes(fastify: FastifyInstance, store: FhirStore)
         response: {
           200: {
             type: 'object', additionalProperties: true,
-            additionalProperties: true,
             description: 'Schedule resource',
           },
           404: {
@@ -225,7 +223,7 @@ export async function scheduleRoutes(fastify: FastifyInstance, store: FhirStore)
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, reply: FastifyReply) => {
       if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
         return reply.code(403).send({ error: 'Test endpoints disabled' });
       }
