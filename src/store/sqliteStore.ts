@@ -6,6 +6,7 @@ import {
   Schedule,
   Slot,
   Appointment,
+  SlotHold,
   FhirSlotQuery,
   FhirScheduleQuery,
   FhirAppointmentQuery,
@@ -91,6 +92,20 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slots_status ON slots(status);
       CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments(start);
       CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+
+      CREATE TABLE IF NOT EXISTS slot_holds (
+        id TEXT PRIMARY KEY,
+        slot_id TEXT NOT NULL,
+        hold_token TEXT UNIQUE NOT NULL,
+        session_id TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_slot ON slot_holds(slot_id);
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_expires ON slot_holds(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_token ON slot_holds(hold_token);
     `);
   }
 
@@ -445,6 +460,83 @@ export class SqliteStore implements FhirStore {
     this.db.prepare('DELETE FROM appointments').run();
   }
 
+  // ==================== SLOT HOLD OPERATIONS ====================
+
+  async holdSlot(slotId: string, sessionId: string, durationMinutes: number): Promise<SlotHold> {
+    // First, clean up expired holds
+    await this.cleanupExpiredHolds();
+
+    // Check if slot exists and is free
+    const slot = await this.getSlotById(slotId);
+    if (!slot) {
+      throw new Error(`Slot ${slotId} not found`);
+    }
+    if (slot.status !== 'free') {
+      throw new Error(`Slot ${slotId} is not available`);
+    }
+
+    // Check if there's already an active hold on this slot
+    const existingHold = await this.getActiveHold(slotId);
+    if (existingHold) {
+      // If the hold is from the same session, extend it
+      if (existingHold.sessionId === sessionId) {
+        const newExpiry = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+        this.db.prepare('UPDATE slot_holds SET expires_at = ? WHERE id = ?').run(newExpiry, existingHold.id);
+        return { ...existingHold, expiresAt: newExpiry };
+      }
+      throw new Error(`Slot ${slotId} is already held by another user`);
+    }
+
+    // Create new hold
+    const id = this.generateId();
+    const holdToken = `hold-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO slot_holds (id, slot_id, hold_token, session_id, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(id, slotId, holdToken, sessionId, expiresAt, now);
+
+    return {
+      id,
+      slotId,
+      holdToken,
+      sessionId,
+      expiresAt,
+      createdAt: now,
+    };
+  }
+
+  async releaseHold(holdToken: string): Promise<void> {
+    this.db.prepare('DELETE FROM slot_holds WHERE hold_token = ?').run(holdToken);
+  }
+
+  async getActiveHold(slotId: string): Promise<SlotHold | null> {
+    const now = new Date().toISOString();
+    const row = this.db.prepare(
+      'SELECT * FROM slot_holds WHERE slot_id = ? AND expires_at > ?'
+    ).get(slotId, now) as any;
+
+    return row ? this.rowToSlotHold(row) : null;
+  }
+
+  async getHoldByToken(holdToken: string): Promise<SlotHold | null> {
+    const row = this.db.prepare(
+      'SELECT * FROM slot_holds WHERE hold_token = ?'
+    ).get(holdToken) as any;
+
+    return row ? this.rowToSlotHold(row) : null;
+  }
+
+  async cleanupExpiredHolds(): Promise<number> {
+    const now = new Date().toISOString();
+    const result = this.db.prepare('DELETE FROM slot_holds WHERE expires_at <= ?').run(now);
+    return result.changes;
+  }
+
   // ==================== HELPER METHODS ====================
 
   private generateId(): string {
@@ -512,6 +604,17 @@ export class SqliteStore implements FhirStore {
       patientInstruction: row.patient_instruction,
       participant: this.parseJson(row.participant),
       meta: { lastUpdated: row.meta_last_updated },
+    };
+  }
+
+  private rowToSlotHold(row: any): SlotHold {
+    return {
+      id: row.id,
+      slotId: row.slot_id,
+      holdToken: row.hold_token,
+      sessionId: row.session_id,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
     };
   }
 

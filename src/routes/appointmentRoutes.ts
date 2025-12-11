@@ -226,7 +226,7 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, reply: FastifyReply) => {
       if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
         return reply.code(403).send({ error: 'Test endpoints disabled' });
       }

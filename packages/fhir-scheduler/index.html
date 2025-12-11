@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FHIR Scheduler Demo</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      color: #1e40af;
+      margin-bottom: 0.5rem;
+    }
+    header p {
+      color: #666;
+    }
+    .info-box {
+      background: #e0f2fe;
+      border: 1px solid #0284c7;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 2rem;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .info-box code {
+      background: #0284c7;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    #scheduler-root {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗓️ FHIR Scheduler Widget</h1>
+    <p>Embeddable appointment scheduling component</p>
+  </header>
+
+  <div class="info-box">
+    <strong>Demo:</strong> This widget connects to the local FHIRTogether server at localhost:4010. 
+    Make sure to run <code>npm run generate-data</code> to populate test providers and slots.
+  </div>
+
+  <div id="scheduler-root"></div>
+
+  <script type="module" src="/src/demo.tsx"></script>
+</body>
+</html>
