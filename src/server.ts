@@ -80,7 +80,7 @@ async function buildServer() {
       docExpansion: 'list',
       deepLinking: true,
     },
-    staticCSP: true,
+    staticCSP: false,
   });
 
   // Initialize store
