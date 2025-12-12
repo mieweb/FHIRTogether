@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState } from 'react';
+import { useMemo, useCallback, useEffect, useState, useRef } from 'react';
 import type { Slot, Schedule } from '../types';
 import { useSchedulerStore } from '../store/schedulerStore';
 
@@ -140,6 +140,9 @@ export function SlotCalendar({
     return { year: today.getFullYear(), month: today.getMonth() };
   });
   
+  // Ref for scrolling to time slots after date selection
+  const timeSlotsRef = useRef<HTMLElement>(null);
+  
   const dateOptions = useMemo(() => getDateOptions(180), []);
   const dateOptionsSet = useMemo(() => new Set(dateOptions), [dateOptions]);
   
@@ -214,6 +217,10 @@ export function SlotCalendar({
   const handleDateSelect = useCallback(
     (date: string) => {
       onDateChange(date);
+      // Scroll to time slots after a brief delay to allow render
+      setTimeout(() => {
+        timeSlotsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     },
     [onDateChange]
   );
@@ -381,7 +388,7 @@ export function SlotCalendar({
       
       {/* Time Slots */}
       {selectedDate && (
-        <section className="fs-time-slots" aria-label="Available times">
+        <section ref={timeSlotsRef} className="fs-time-slots" aria-label="Available times">
           <h3 className="fs-subsection-title">
             {formatDateDisplay(selectedDate)}
           </h3>
