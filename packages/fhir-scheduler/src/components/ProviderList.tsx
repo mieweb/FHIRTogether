@@ -5,6 +5,7 @@ import { useSchedulerStore } from '../store/schedulerStore';
 interface ProviderListProps {
   providers: Schedule[];
   onSelect: (provider: Schedule) => void;
+  onBack?: () => void;
   loading?: boolean;
 }
 
@@ -54,7 +55,7 @@ function getServiceType(schedule: Schedule): string | null {
   return null;
 }
 
-export function ProviderList({ providers, onSelect, loading }: ProviderListProps) {
+export function ProviderList({ providers, onSelect, onBack, loading }: ProviderListProps) {
   if (loading) {
     return (
       <div className="fs-provider-list fs-loading">
@@ -95,6 +96,21 @@ export function ProviderList({ providers, onSelect, loading }: ProviderListProps
   
   return (
     <div className="fs-provider-list" role="list" aria-label="Available providers">
+      {onBack && (
+        <header className="fs-provider-header">
+          <button
+            type="button"
+            className="fs-back-button"
+            onClick={onBack}
+            aria-label="Back to visit type selection"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+        </header>
+      )}
       <h2 className="fs-section-title">Select a Provider</h2>
       <div className="fs-provider-grid">
         {providers.map((provider) => {
@@ -146,6 +162,7 @@ export function ConnectedProviderList() {
   const loading = useSchedulerStore((state) => state.loading);
   const selectProvider = useSchedulerStore((state) => state.selectProvider);
   const fetchProviders = useSchedulerStore((state) => state.fetchProviders);
+  const goBack = useSchedulerStore((state) => state.goBack);
   
   React.useEffect(() => {
     if (providers.length === 0) {
@@ -153,5 +170,5 @@ export function ConnectedProviderList() {
     }
   }, [fetchProviders, providers.length]);
   
-  return <ProviderList providers={providers} onSelect={selectProvider} loading={loading} />;
+  return <ProviderList providers={providers} onSelect={selectProvider} onBack={goBack} loading={loading} />;
 }

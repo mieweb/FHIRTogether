@@ -7,16 +7,20 @@ import { defineConfig, devices } from '@playwright/test';
  *   npx playwright test
  * 
  * Prerequisites:
- *   - FHIRTogether server: npm run dev (from project root)
- *   - Vite dev server: npm run dev (from packages/fhir-scheduler)
+ *   - Test data is auto-generated if missing (via globalSetup)
+ *   - Servers are auto-started (via webServer config)
  */
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  /* Use 1 worker to avoid slot hold conflicts between parallel tests */
+  workers: 1,
   reporter: 'html',
+  
+  /* Auto-generate test data if missing */
+  globalSetup: './tests/global-setup.ts',
   
   use: {
     baseURL: 'http://localhost:5174',

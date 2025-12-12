@@ -6,6 +6,7 @@ import type {
   PatientInfo,
   QuestionnaireResponse,
   SchedulerStep,
+  VisitType,
 } from '../types';
 import { createFhirClient, type FhirClient } from '../api/fhirClient';
 
@@ -20,6 +21,7 @@ interface SchedulerState {
   dateAvailability: Record<string, number>; // date -> slot count
   
   // Selection
+  visitType: VisitType | null;
   selectedProvider: Schedule | null;
   selectedDate: string | null;
   selectedSlot: Slot | null;
@@ -48,6 +50,10 @@ interface SchedulerActions {
   // Configuration
   initialize: (baseUrl: string, holdDurationMinutes?: number) => void;
   
+  // Visit type selection
+  selectVisitType: (type: VisitType) => void;
+  proceedFromQuestionnaire: () => void;
+  
   // Provider actions
   fetchProviders: () => Promise<void>;
   selectProvider: (provider: Schedule) => void;
@@ -66,6 +72,7 @@ interface SchedulerActions {
   // Navigation
   goBack: () => void;
   reset: () => void;
+  navigateToStep: (step: SchedulerStep, providerId?: string) => void;
   
   // Utility
   getHoldTimeRemaining: () => number;
@@ -83,12 +90,13 @@ const initialState: Omit<SchedulerState, '_sessionId'> = {
   dateAvailability: {},
   providers: [],
   slots: [],
+  visitType: null,
   selectedProvider: null,
   selectedDate: null,
   selectedSlot: null,
   holdToken: null,
   holdExpiresAt: null,
-  step: 'providers',
+  step: 'visit-type',
   patientInfo: null,
   questionnaireResponse: null,
   loading: false,
@@ -109,6 +117,23 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
       holdDurationMinutes,
       _client: client,
     });
+  },
+  
+  selectVisitType: (type: VisitType) => {
+    set({ visitType: type });
+    
+    if (type === 'follow-up') {
+      // Follow-up: go directly to provider selection
+      set({ step: 'providers' });
+    } else {
+      // New patient: show questionnaire first
+      set({ step: 'questionnaire' });
+    }
+  },
+  
+  proceedFromQuestionnaire: () => {
+    // Move from questionnaire to provider selection
+    set({ step: 'providers' });
   },
   
   fetchProviders: async () => {
@@ -320,9 +345,20 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
   },
   
   goBack: () => {
-    const { step, releaseHold } = get();
+    const { step, releaseHold, visitType } = get();
     
     switch (step) {
+      case 'questionnaire':
+        set({ step: 'visit-type', visitType: null });
+        break;
+      case 'providers':
+        // Go back to questionnaire for new patients, or visit-type for follow-ups
+        if (visitType === 'new-patient') {
+          set({ step: 'questionnaire', selectedProvider: null });
+        } else {
+          set({ step: 'visit-type', visitType: null, selectedProvider: null });
+        }
+        break;
       case 'calendar':
         set({ step: 'providers', selectedProvider: null, slots: [] });
         break;
@@ -349,6 +385,106 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
       ...initialState,
       _sessionId: generateSessionId(),
     });
+  },
+  
+  navigateToStep: (targetStep: SchedulerStep, providerId?: string) => {
+    const { step, visitType, selectedProvider, selectedSlot, providers, fetchProviders } = get();
+    
+    // Don't navigate if already at target step
+    if (step === targetStep) return;
+    
+    // Helper to find and select provider by ID
+    const findAndSelectProvider = (id: string) => {
+      const provider = providers.find(
+        (p) => p.id === id || `Schedule/${p.id}` === id
+      );
+      if (provider) {
+        set({
+          selectedProvider: provider,
+          visitType: visitType || 'follow-up',
+        });
+        return true;
+      }
+      return false;
+    };
+    
+    // Define what state is required for each step
+    switch (targetStep) {
+      case 'visit-type':
+        // Always allowed - reset to initial
+        set({ step: 'visit-type', visitType: null });
+        break;
+        
+      case 'questionnaire':
+        // Set as new patient and go to questionnaire
+        set({ step: 'questionnaire', visitType: 'new-patient' });
+        break;
+        
+      case 'providers':
+        // Can deep link to providers - set follow-up to skip questionnaire
+        if (!visitType) {
+          set({ step: 'providers', visitType: 'follow-up' });
+        } else {
+          set({ step: 'providers' });
+        }
+        break;
+        
+      case 'calendar':
+        // If provider ID is provided, try to select that provider
+        if (providerId) {
+          if (providers.length > 0) {
+            if (findAndSelectProvider(providerId)) {
+              set({ step: 'calendar' });
+            } else {
+              // Provider not found - go to provider list
+              set({ step: 'providers', visitType: visitType || 'follow-up' });
+            }
+          } else {
+            // Providers not loaded yet - fetch them and retry
+            fetchProviders().then(() => {
+              const { providers: loadedProviders } = get();
+              const provider = loadedProviders.find(
+                (p) => p.id === providerId || `Schedule/${p.id}` === providerId
+              );
+              if (provider) {
+                set({
+                  selectedProvider: provider,
+                  step: 'calendar',
+                  visitType: visitType || 'follow-up',
+                });
+              } else {
+                set({ step: 'providers', visitType: visitType || 'follow-up' });
+              }
+            });
+          }
+        } else if (selectedProvider) {
+          set({ step: 'calendar' });
+        } else {
+          set({ step: 'providers', visitType: visitType || 'follow-up' });
+        }
+        break;
+        
+      case 'booking':
+        // Requires a slot - redirect appropriately
+        if (!selectedSlot) {
+          if (providerId && !selectedProvider) {
+            // Try to navigate to calendar with provider first
+            get().navigateToStep('calendar', providerId);
+          } else if (!selectedProvider) {
+            set({ step: 'providers', visitType: visitType || 'follow-up' });
+          } else {
+            set({ step: 'calendar' });
+          }
+        } else {
+          set({ step: 'booking' });
+        }
+        break;
+        
+      case 'confirmation':
+        // Can't deep link to confirmation - go to start
+        set({ step: 'visit-type', visitType: null });
+        break;
+    }
   },
   
   getHoldTimeRemaining: () => {

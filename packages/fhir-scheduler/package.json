@@ -56,6 +56,7 @@
     }
   },
   "dependencies": {
+    "@mieweb/forms-renderer": "^0.1.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

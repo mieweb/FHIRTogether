@@ -14,15 +14,20 @@ import {
 
 export class SqliteStore implements FhirStore {
   private db: Database.Database;
+  private dataDir: string;
+  private seedMetadataPath: string;
 
   constructor(dbPath?: string) {
     const finalPath = dbPath || process.env.SQLITE_DB_PATH || './data/fhirtogether.db';
     
     // Ensure directory exists
-    const dir = path.dirname(finalPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    this.dataDir = path.dirname(finalPath);
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
     }
+    
+    // Seed metadata file path (committable to git)
+    this.seedMetadataPath = path.join(this.dataDir, 'seed-metadata.json');
 
     this.db = new Database(finalPath);
     this.db.pragma('journal_mode = WAL');
@@ -111,6 +116,69 @@ export class SqliteStore implements FhirStore {
 
   async close(): Promise<void> {
     this.db.close();
+  }
+
+  // ==================== DATE OFFSET FOR CONSISTENT TEST DATA ====================
+
+  /**
+   * Get the generation date from seed metadata file
+   * This file is committed to git so all environments use the same date offset
+   */
+  getGenerationDate(): string | null {
+    try {
+      if (fs.existsSync(this.seedMetadataPath)) {
+        const data = JSON.parse(fs.readFileSync(this.seedMetadataPath, 'utf-8'));
+        return data.generationDate || null;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null;
+  }
+
+  /**
+   * Set the generation date in seed metadata file
+   * This file should be committed to git
+   */
+  setGenerationDate(date: string): void {
+    const metadata = {
+      generationDate: date,
+      description: 'Seed data generation metadata - commit this file to git',
+      note: 'Dates in slots/appointments are shifted by (today - generationDate) days',
+    };
+    fs.writeFileSync(this.seedMetadataPath, JSON.stringify(metadata, null, 2) + '\n');
+  }
+
+  /**
+   * Calculate the number of days to shift dates from generation to today
+   */
+  private getDateOffsetDays(): number {
+    const generationDate = this.getGenerationDate();
+    if (!generationDate) return 0;
+    
+    const genDate = new Date(generationDate);
+    const today = new Date();
+    
+    // Reset time to start of day for accurate day calculation
+    genDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    const diffMs = today.getTime() - genDate.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Shift an ISO date string by the date offset
+   */
+  private shiftDate(isoDate: string | undefined): string | undefined {
+    if (!isoDate) return undefined;
+    
+    const offsetDays = this.getDateOffsetDays();
+    if (offsetDays === 0) return isoDate;
+    
+    const date = new Date(isoDate);
+    date.setDate(date.getDate() + offsetDays);
+    return date.toISOString();
   }
 
   // ==================== SCHEDULE OPERATIONS ====================
@@ -212,6 +280,32 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSchedules(): Promise<void> {
     this.db.prepare('DELETE FROM schedules').run();
+  }
+
+  /**
+   * Import a raw schedule row from seed data (bypasses normal creation logic)
+   */
+  async importScheduleRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO schedules (
+        id, active, service_category, service_type, specialty, actor,
+        planning_horizon_start, planning_horizon_end, comment, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.active,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.actor,
+      row.planning_horizon_start,
+      row.planning_horizon_end,
+      row.comment,
+      row.meta_last_updated,
+      row.created_at
+    );
   }
 
   // ==================== SLOT OPERATIONS ====================
@@ -326,6 +420,34 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSlots(): Promise<void> {
     this.db.prepare('DELETE FROM slots').run();
+  }
+
+  /**
+   * Import a raw slot row from seed data (bypasses normal creation logic)
+   */
+  async importSlotRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO slots (
+        id, schedule_id, status, start, end, service_category, service_type,
+        specialty, appointment_type, overbooked, comment, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.schedule_id,
+      row.status,
+      row.start,
+      row.end,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.appointment_type,
+      row.overbooked,
+      row.comment,
+      row.meta_last_updated,
+      row.created_at
+    );
   }
 
   // ==================== APPOINTMENT OPERATIONS ====================
@@ -460,6 +582,42 @@ export class SqliteStore implements FhirStore {
     this.db.prepare('DELETE FROM appointments').run();
   }
 
+  /**
+   * Import a raw appointment row from seed data (bypasses normal creation logic)
+   */
+  async importAppointmentRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO appointments (
+        id, status, cancelation_reason, service_category, service_type,
+        specialty, appointment_type, reason_code, priority, description,
+        slot_refs, start, end, created, comment, patient_instruction,
+        participant, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.status,
+      row.cancelation_reason,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.appointment_type,
+      row.reason_code,
+      row.priority,
+      row.description,
+      row.slot_refs,
+      row.start,
+      row.end,
+      row.created,
+      row.comment,
+      row.patient_instruction,
+      row.participant,
+      row.meta_last_updated,
+      row.created_at
+    );
+  }
+
   // ==================== SLOT HOLD OPERATIONS ====================
 
   async holdSlot(slotId: string, sessionId: string, durationMinutes: number): Promise<SlotHold> {
@@ -557,8 +715,8 @@ export class SqliteStore implements FhirStore {
       specialty: this.parseJson(row.specialty),
       actor: this.parseJson(row.actor),
       planningHorizon: row.planning_horizon_start ? {
-        start: row.planning_horizon_start,
-        end: row.planning_horizon_end,
+        start: this.shiftDate(row.planning_horizon_start) || row.planning_horizon_start,
+        end: this.shiftDate(row.planning_horizon_end) || row.planning_horizon_end,
       } : undefined,
       comment: row.comment,
       meta: { lastUpdated: row.meta_last_updated },
@@ -571,8 +729,8 @@ export class SqliteStore implements FhirStore {
       id: row.id,
       schedule: { reference: `Schedule/${row.schedule_id}` },
       status: row.status,
-      start: row.start,
-      end: row.end,
+      start: this.shiftDate(row.start) || row.start,
+      end: this.shiftDate(row.end) || row.end,
       serviceCategory: this.parseJson(row.service_category),
       serviceType: this.parseJson(row.service_type),
       specialty: this.parseJson(row.specialty),
@@ -597,8 +755,8 @@ export class SqliteStore implements FhirStore {
       priority: row.priority,
       description: row.description,
       slot: this.parseJson(row.slot_refs),
-      start: row.start,
-      end: row.end,
+      start: this.shiftDate(row.start),
+      end: this.shiftDate(row.end),
       created: row.created,
       comment: row.comment,
       patientInstruction: row.patient_instruction,

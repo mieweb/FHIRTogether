@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { SchedulerWidget } from './components/SchedulerWidget';
-import type { Appointment } from './types';
+import type { Appointment, FormsRendererFormData } from './types';
 
 /**
  * FHIR Scheduler Web Component
@@ -16,7 +16,7 @@ import type { Appointment } from './types';
  */
 class FhirSchedulerElement extends HTMLElement {
   private root: Root | null = null;
-  private _questionnaireFormData: unknown = undefined;
+  private _questionnaireFormData: FormsRendererFormData | undefined = undefined;
   
   static get observedAttributes() {
     return ['fhir-base-url', 'provider-id', 'hold-duration'];
@@ -42,11 +42,11 @@ class FhirSchedulerElement extends HTMLElement {
     this.render();
   }
   
-  get questionnaireFormData(): unknown {
+  get questionnaireFormData(): FormsRendererFormData | undefined {
     return this._questionnaireFormData;
   }
   
-  set questionnaireFormData(value: unknown) {
+  set questionnaireFormData(value: FormsRendererFormData | undefined) {
     this._questionnaireFormData = value;
     this.render();
   }

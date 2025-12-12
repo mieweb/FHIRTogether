@@ -2,7 +2,15 @@
 
 A React component for browsing provider schedules and booking appointments, embeddable in any application.
 
+<!-- Screenshots section auto-generated. See docs/README-SCREENSHOTS.md -->
+<!-- Run: npx playwright test tests/screenshots.spec.ts to regenerate -->
 ## Screenshots
+
+### Visit Type Selection
+![Visit Type](docs/screenshots/00-visit-type.png)
+
+### New Patient Intake Questionnaire
+![Questionnaire](docs/screenshots/00b-questionnaire.png)
 
 ### Provider Selection
 ![Provider List](docs/screenshots/01-provider-list.png)

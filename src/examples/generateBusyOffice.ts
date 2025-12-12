@@ -297,6 +297,13 @@ async function main() {
     await store.deleteAllSchedules();
     console.log('✓ Data cleared\n');
 
+    // Store the generation date for dynamic date shifting
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    store.setGenerationDate(today.toISOString());
+    console.log(`📅 Generation date set to: ${today.toISOString().split('T')[0]}`);
+    console.log('   (Dates will auto-shift to stay relative to today)\n');
+
     // Generate schedules and slots (6 months ahead)
     const scheduleIds = await generateSchedulesAndSlots(store, 180);
 
