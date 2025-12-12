@@ -1,0 +1,1118 @@
+/* FHIR Scheduler Widget Styles */
+/* Plain CSS for maximum compatibility */
+
+/* Base widget container */
+.fs-scheduler-widget {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #111827;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #ffffff;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+/* Section titles */
+.fs-section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: #111827;
+}
+
+.fs-subsection-title {
+  font-size: 1.125rem;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+/* Loading states */
+.fs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 0;
+}
+
+.fs-loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fs-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fs-spinner-track {
+  stroke: #e5e7eb;
+}
+
+.fs-spinner-head {
+  stroke: #2563eb;
+}
+
+.fs-loading-text {
+  color: #4b5563;
+  font-size: 0.875rem;
+}
+
+/* Empty states */
+.fs-empty {
+  padding: 3rem 0;
+  text-align: center;
+}
+
+.fs-empty-message {
+  color: #6b7280;
+}
+
+/* Provider List */
+.fs-provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fs-provider-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.fs-provider-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.fs-provider-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.fs-provider-card:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.fs-provider-card:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.fs-provider-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background-color: #dbeafe;
+  flex-shrink: 0;
+}
+
+.fs-avatar-initials {
+  color: #1d4ed8;
+  font-weight: 600;
+  font-size: 1.125rem;
+}
+
+.fs-provider-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.fs-provider-name {
+  font-weight: 500;
+  color: #111827;
+  margin: 0;
+}
+
+.fs-provider-specialty {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin: 0.25rem 0 0;
+}
+
+.fs-provider-service {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0.125rem 0 0;
+}
+
+.fs-status-badge {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+}
+
+.fs-status-active {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+/* Back button */
+.fs-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #4b5563;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fs-back-button:hover {
+  color: #111827;
+}
+
+.fs-back-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+  border-radius: 0.25rem;
+}
+
+.fs-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Calendar */
+.fs-slot-calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fs-calendar-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.fs-calendar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.fs-date-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fs-date-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* View Toggle */
+.fs-view-toggle {
+  display: flex;
+  background-color: #f3f4f6;
+  border-radius: 0.375rem;
+  padding: 2px;
+}
+
+.fs-view-toggle-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-radius: 0.25rem;
+  transition: all 0.15s ease;
+}
+
+.fs-view-toggle-btn:hover {
+  color: #374151;
+}
+
+.fs-view-toggle-btn.fs-active {
+  background-color: #ffffff;
+  color: #111827;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Available Dates List (compact view) */
+.fs-available-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fs-no-available-dates {
+  color: #6b7280;
+  font-size: 0.875rem;
+  padding: 1rem 0;
+}
+
+.fs-available-date-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  min-width: 70px;
+  border-radius: 0.5rem;
+  border: 1px solid #22c55e;
+  background-color: #f0fdf4;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 0.25rem;
+}
+
+.fs-available-date-btn:hover {
+  background-color: #dcfce7;
+  border-color: #16a34a;
+}
+
+.fs-available-date-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #22c55e;
+}
+
+.fs-available-date-btn.fs-selected {
+  background-color: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.fs-date-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fs-date-day {
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.fs-available-date-btn.fs-selected .fs-date-day {
+  color: #bfdbfe;
+}
+
+.fs-date-monthday {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.fs-slot-count {
+  font-size: 0.625rem;
+  color: #16a34a;
+}
+
+.fs-available-date-btn.fs-selected .fs-slot-count {
+  color: #bfdbfe;
+}
+
+/* Calendar Container with Month Navigation */
+.fs-calendar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fs-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.fs-month-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fs-month-nav-btn:hover:not(:disabled) {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+.fs-month-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.fs-month-nav-btn svg {
+  width: 16px;
+  height: 16px;
+  color: #374151;
+}
+
+.fs-month-label-nav {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+/* Calendar Grid Layout */
+.fs-calendar-grid {
+  display: flex;
+  flex-direction: column;
+  background-color: #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  gap: 1px;
+}
+
+.fs-calendar-header-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background-color: #f9fafb;
+}
+
+.fs-calendar-header-cell {
+  padding: 0.375rem 0.25rem;
+  text-align: center;
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+}
+
+.fs-calendar-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.fs-calendar-cell {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #ffffff;
+  position: relative;
+}
+
+.fs-calendar-cell.fs-empty {
+  background-color: #fafafa;
+}
+
+.fs-date-option {
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0.25rem;
+}
+
+.fs-date-option:hover {
+  background-color: #eff6ff;
+}
+
+.fs-date-option:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+.fs-date-option.fs-selected {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+/* Availability indicators */
+.fs-date-option.fs-has-availability {
+  background-color: #f0fdf4;
+}
+
+.fs-date-option.fs-has-availability:hover {
+  background-color: #dcfce7;
+}
+
+.fs-date-option.fs-selected.fs-has-availability {
+  background-color: #2563eb;
+}
+
+.fs-date-option.fs-no-availability {
+  opacity: 0.5;
+  background-color: #fafafa;
+}
+
+.fs-date-option.fs-no-availability .fs-day-number {
+  color: #9ca3af;
+}
+
+.fs-availability-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #22c55e;
+}
+
+.fs-date-option.fs-selected .fs-availability-dot {
+  background-color: #86efac;
+}
+
+.fs-month-label {
+  font-size: 0.5rem;
+  font-weight: 600;
+  color: #3b82f6;
+  text-transform: uppercase;
+  position: absolute;
+  top: 2px;
+  left: 3px;
+}
+
+.fs-date-option.fs-selected .fs-month-label {
+  color: #bfdbfe;
+}
+
+.fs-day-number {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Mobile responsive */
+@media (max-width: 480px) {
+  .fs-date-picker-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .fs-calendar-cell {
+    height: 32px;
+  }
+  
+  .fs-calendar-header-cell {
+    font-size: 0.5rem;
+    padding: 0.25rem 0.125rem;
+  }
+  
+  .fs-day-number {
+    font-size: 0.75rem;
+  }
+  
+  .fs-month-label {
+    font-size: 0.375rem;
+  }
+  
+  .fs-availability-dot {
+    width: 4px;
+    height: 4px;
+    top: 2px;
+    right: 2px;
+  }
+  
+  .fs-available-date-btn {
+    min-width: 60px;
+    padding: 0.375rem 0.5rem;
+  }
+}
+
+/* Time slots */
+.fs-time-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fs-loading-slots,
+.fs-no-slots {
+  padding: 2rem 0;
+  text-align: center;
+  color: #6b7280;
+}
+
+.fs-slot-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fs-slot-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fs-period-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin: 0;
+}
+
+.fs-slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.fs-slot-button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fs-slot-button:hover {
+  border-color: #60a5fa;
+  background-color: #eff6ff;
+}
+
+.fs-slot-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+/* Booking form */
+.fs-booking-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.fs-form-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.fs-form-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+/* Hold timer */
+.fs-hold-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #eff6ff;
+  border-radius: 0.5rem;
+  color: #1d4ed8;
+}
+
+.fs-hold-timer.fs-timer-warning {
+  background-color: #fffbeb;
+  color: #b45309;
+}
+
+.fs-timer-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.fs-timer-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* Appointment summary */
+.fs-appointment-summary {
+  background-color: #f9fafb;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.fs-summary-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 0.75rem;
+}
+
+.fs-summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.fs-summary-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+}
+
+.fs-summary-item dt {
+  color: #6b7280;
+}
+
+.fs-summary-item dd {
+  font-weight: 500;
+  color: #111827;
+  margin: 0;
+}
+
+/* Error messages */
+.fs-error-message {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  color: #b91c1c;
+  font-size: 0.875rem;
+}
+
+.fs-error-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+/* Patient form */
+.fs-patient-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.fs-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fs-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+}
+
+.fs-required {
+  color: #ef4444;
+}
+
+.fs-input,
+.fs-textarea {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 1rem;
+  color: #111827;
+  background-color: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+
+.fs-input::placeholder,
+.fs-textarea::placeholder {
+  color: #9ca3af;
+}
+
+.fs-input:focus,
+.fs-textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.fs-input:disabled,
+.fs-textarea:disabled {
+  background-color: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.fs-input-error {
+  border-color: #ef4444;
+}
+
+.fs-input-error:focus {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+.fs-field-error {
+  font-size: 0.875rem;
+  color: #dc2626;
+}
+
+.fs-textarea {
+  resize: none;
+}
+
+.fs-questionnaire-section {
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.fs-questionnaire-placeholder {
+  color: #6b7280;
+  font-style: italic;
+  font-size: 0.875rem;
+}
+
+.fs-questionnaire-help {
+  color: #4b5563;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.fs-questionnaire-wrapper {
+  margin-top: 0.75rem;
+}
+
+.fs-questionnaire-wrapper.fs-disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.fs-questionnaire-renderer {
+  /* Override forms-renderer styles to match scheduler theme */
+}
+
+/* Override forms-renderer default container styles */
+.fs-questionnaire-wrapper .qb-render-root {
+  padding: 0;
+  max-width: 100%;
+}
+
+.fs-questionnaire-wrapper .renderer-container {
+  padding: 0;
+}
+
+/* Submit button */
+.fs-submit-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  margin-top: 1.5rem;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fs-submit-button:hover {
+  background-color: #1d4ed8;
+}
+
+.fs-submit-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6, 0 0 0 4px rgba(59, 130, 246, 0.2);
+}
+
+.fs-submit-button:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.fs-button-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Confirmation */
+.fs-confirmation {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.fs-confirmation-icon {
+  width: 4rem;
+  height: 4rem;
+  margin: 0 auto 1.5rem;
+}
+
+.fs-confirmation-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.fs-confirmation-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.5rem;
+}
+
+.fs-confirmation-message {
+  color: #4b5563;
+  margin: 0 0 2rem;
+}
+
+.fs-confirmation-details {
+  background-color: #f9fafb;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  text-align: left;
+  margin-bottom: 2rem;
+}
+
+.fs-details-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 1rem;
+}
+
+.fs-details-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.fs-details-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.fs-details-item:last-child {
+  border-bottom: none;
+}
+
+.fs-details-item dt {
+  color: #6b7280;
+}
+
+.fs-details-item dd {
+  font-weight: 500;
+  color: #111827;
+  margin: 0;
+}
+
+.fs-confirmation-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #2563eb;
+}
+
+.fs-confirmation-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fs-secondary-button {
+  padding: 0.5rem 1.5rem;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  color: #374151;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.fs-secondary-button:hover {
+  background-color: #f9fafb;
+}
+
+.fs-secondary-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.fs-confirmation-footer {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.fs-footer-text {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.fs-link {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.fs-link:hover {
+  color: #1d4ed8;
+}
+
+/* =====================================================
+   Visit Type Selector (Landing Page)
+   ===================================================== */
+
+.fs-visit-type-selector {
+  padding: 1rem 0;
+}
+
+.fs-visit-type-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.fs-visit-type-subtitle {
+  font-size: 1rem;
+  color: #6b7280;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.fs-visit-type-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.fs-visit-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1.5rem;
+  background-color: #ffffff;
+  border: 2px solid #e5e7eb;
+  border-radius: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.fs-visit-type-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  transform: translateY(-2px);
+}
+
+.fs-visit-type-card:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+}
+
+.fs-visit-type-icon {
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 1rem;
+  color: #2563eb;
+}
+
+.fs-visit-type-card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 0.5rem;
+}
+
+.fs-visit-type-card-description {
+  font-size: 0.875rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+/* =====================================================
+   Intake Questionnaire Step
+   ===================================================== */
+
+.fs-intake-questionnaire {
+  padding: 1rem 0;
+}
+
+.fs-questionnaire-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.fs-questionnaire-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.fs-questionnaire-content {
+  margin-bottom: 1.5rem;
+}
+
+.fs-questionnaire-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.fs-validation-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.fs-validation-error-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+

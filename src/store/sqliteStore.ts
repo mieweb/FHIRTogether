@@ -6,6 +6,7 @@ import {
   Schedule,
   Slot,
   Appointment,
+  SlotHold,
   FhirSlotQuery,
   FhirScheduleQuery,
   FhirAppointmentQuery,
@@ -13,15 +14,20 @@ import {
 
 export class SqliteStore implements FhirStore {
   private db: Database.Database;
+  private dataDir: string;
+  private seedMetadataPath: string;
 
   constructor(dbPath?: string) {
     const finalPath = dbPath || process.env.SQLITE_DB_PATH || './data/fhirtogether.db';
     
     // Ensure directory exists
-    const dir = path.dirname(finalPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    this.dataDir = path.dirname(finalPath);
+    if (!fs.existsSync(this.dataDir)) {
+      fs.mkdirSync(this.dataDir, { recursive: true });
     }
+    
+    // Seed metadata file path (committable to git)
+    this.seedMetadataPath = path.join(this.dataDir, 'seed-metadata.json');
 
     this.db = new Database(finalPath);
     this.db.pragma('journal_mode = WAL');
@@ -91,11 +97,88 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slots_status ON slots(status);
       CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments(start);
       CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+
+      CREATE TABLE IF NOT EXISTS slot_holds (
+        id TEXT PRIMARY KEY,
+        slot_id TEXT NOT NULL,
+        hold_token TEXT UNIQUE NOT NULL,
+        session_id TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_slot ON slot_holds(slot_id);
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_expires ON slot_holds(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_slot_holds_token ON slot_holds(hold_token);
     `);
   }
 
   async close(): Promise<void> {
     this.db.close();
+  }
+
+  // ==================== DATE OFFSET FOR CONSISTENT TEST DATA ====================
+
+  /**
+   * Get the generation date from seed metadata file
+   * This file is committed to git so all environments use the same date offset
+   */
+  getGenerationDate(): string | null {
+    try {
+      if (fs.existsSync(this.seedMetadataPath)) {
+        const data = JSON.parse(fs.readFileSync(this.seedMetadataPath, 'utf-8'));
+        return data.generationDate || null;
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null;
+  }
+
+  /**
+   * Set the generation date in seed metadata file
+   * This file should be committed to git
+   */
+  setGenerationDate(date: string): void {
+    const metadata = {
+      generationDate: date,
+      description: 'Seed data generation metadata - commit this file to git',
+      note: 'Dates in slots/appointments are shifted by (today - generationDate) days',
+    };
+    fs.writeFileSync(this.seedMetadataPath, JSON.stringify(metadata, null, 2) + '\n');
+  }
+
+  /**
+   * Calculate the number of days to shift dates from generation to today
+   */
+  private getDateOffsetDays(): number {
+    const generationDate = this.getGenerationDate();
+    if (!generationDate) return 0;
+    
+    const genDate = new Date(generationDate);
+    const today = new Date();
+    
+    // Reset time to start of day for accurate day calculation
+    genDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    
+    const diffMs = today.getTime() - genDate.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  }
+
+  /**
+   * Shift an ISO date string by the date offset
+   */
+  private shiftDate(isoDate: string | undefined): string | undefined {
+    if (!isoDate) return undefined;
+    
+    const offsetDays = this.getDateOffsetDays();
+    if (offsetDays === 0) return isoDate;
+    
+    const date = new Date(isoDate);
+    date.setDate(date.getDate() + offsetDays);
+    return date.toISOString();
   }
 
   // ==================== SCHEDULE OPERATIONS ====================
@@ -197,6 +280,32 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSchedules(): Promise<void> {
     this.db.prepare('DELETE FROM schedules').run();
+  }
+
+  /**
+   * Import a raw schedule row from seed data (bypasses normal creation logic)
+   */
+  async importScheduleRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO schedules (
+        id, active, service_category, service_type, specialty, actor,
+        planning_horizon_start, planning_horizon_end, comment, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.active,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.actor,
+      row.planning_horizon_start,
+      row.planning_horizon_end,
+      row.comment,
+      row.meta_last_updated,
+      row.created_at
+    );
   }
 
   // ==================== SLOT OPERATIONS ====================
@@ -311,6 +420,34 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSlots(): Promise<void> {
     this.db.prepare('DELETE FROM slots').run();
+  }
+
+  /**
+   * Import a raw slot row from seed data (bypasses normal creation logic)
+   */
+  async importSlotRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO slots (
+        id, schedule_id, status, start, end, service_category, service_type,
+        specialty, appointment_type, overbooked, comment, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.schedule_id,
+      row.status,
+      row.start,
+      row.end,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.appointment_type,
+      row.overbooked,
+      row.comment,
+      row.meta_last_updated,
+      row.created_at
+    );
   }
 
   // ==================== APPOINTMENT OPERATIONS ====================
@@ -445,6 +582,119 @@ export class SqliteStore implements FhirStore {
     this.db.prepare('DELETE FROM appointments').run();
   }
 
+  /**
+   * Import a raw appointment row from seed data (bypasses normal creation logic)
+   */
+  async importAppointmentRow(row: any): Promise<void> {
+    const stmt = this.db.prepare(`
+      INSERT INTO appointments (
+        id, status, cancelation_reason, service_category, service_type,
+        specialty, appointment_type, reason_code, priority, description,
+        slot_refs, start, end, created, comment, patient_instruction,
+        participant, meta_last_updated, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(
+      row.id,
+      row.status,
+      row.cancelation_reason,
+      row.service_category,
+      row.service_type,
+      row.specialty,
+      row.appointment_type,
+      row.reason_code,
+      row.priority,
+      row.description,
+      row.slot_refs,
+      row.start,
+      row.end,
+      row.created,
+      row.comment,
+      row.patient_instruction,
+      row.participant,
+      row.meta_last_updated,
+      row.created_at
+    );
+  }
+
+  // ==================== SLOT HOLD OPERATIONS ====================
+
+  async holdSlot(slotId: string, sessionId: string, durationMinutes: number): Promise<SlotHold> {
+    // First, clean up expired holds
+    await this.cleanupExpiredHolds();
+
+    // Check if slot exists and is free
+    const slot = await this.getSlotById(slotId);
+    if (!slot) {
+      throw new Error(`Slot ${slotId} not found`);
+    }
+    if (slot.status !== 'free') {
+      throw new Error(`Slot ${slotId} is not available`);
+    }
+
+    // Check if there's already an active hold on this slot
+    const existingHold = await this.getActiveHold(slotId);
+    if (existingHold) {
+      // If the hold is from the same session, extend it
+      if (existingHold.sessionId === sessionId) {
+        const newExpiry = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+        this.db.prepare('UPDATE slot_holds SET expires_at = ? WHERE id = ?').run(newExpiry, existingHold.id);
+        return { ...existingHold, expiresAt: newExpiry };
+      }
+      throw new Error(`Slot ${slotId} is already held by another user`);
+    }
+
+    // Create new hold
+    const id = this.generateId();
+    const holdToken = `hold-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO slot_holds (id, slot_id, hold_token, session_id, expires_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(id, slotId, holdToken, sessionId, expiresAt, now);
+
+    return {
+      id,
+      slotId,
+      holdToken,
+      sessionId,
+      expiresAt,
+      createdAt: now,
+    };
+  }
+
+  async releaseHold(holdToken: string): Promise<void> {
+    this.db.prepare('DELETE FROM slot_holds WHERE hold_token = ?').run(holdToken);
+  }
+
+  async getActiveHold(slotId: string): Promise<SlotHold | null> {
+    const now = new Date().toISOString();
+    const row = this.db.prepare(
+      'SELECT * FROM slot_holds WHERE slot_id = ? AND expires_at > ?'
+    ).get(slotId, now) as any;
+
+    return row ? this.rowToSlotHold(row) : null;
+  }
+
+  async getHoldByToken(holdToken: string): Promise<SlotHold | null> {
+    const row = this.db.prepare(
+      'SELECT * FROM slot_holds WHERE hold_token = ?'
+    ).get(holdToken) as any;
+
+    return row ? this.rowToSlotHold(row) : null;
+  }
+
+  async cleanupExpiredHolds(): Promise<number> {
+    const now = new Date().toISOString();
+    const result = this.db.prepare('DELETE FROM slot_holds WHERE expires_at <= ?').run(now);
+    return result.changes;
+  }
+
   // ==================== HELPER METHODS ====================
 
   private generateId(): string {
@@ -465,8 +715,8 @@ export class SqliteStore implements FhirStore {
       specialty: this.parseJson(row.specialty),
       actor: this.parseJson(row.actor),
       planningHorizon: row.planning_horizon_start ? {
-        start: row.planning_horizon_start,
-        end: row.planning_horizon_end,
+        start: this.shiftDate(row.planning_horizon_start) || row.planning_horizon_start,
+        end: this.shiftDate(row.planning_horizon_end) || row.planning_horizon_end,
       } : undefined,
       comment: row.comment,
       meta: { lastUpdated: row.meta_last_updated },
@@ -479,8 +729,8 @@ export class SqliteStore implements FhirStore {
       id: row.id,
       schedule: { reference: `Schedule/${row.schedule_id}` },
       status: row.status,
-      start: row.start,
-      end: row.end,
+      start: this.shiftDate(row.start) || row.start,
+      end: this.shiftDate(row.end) || row.end,
       serviceCategory: this.parseJson(row.service_category),
       serviceType: this.parseJson(row.service_type),
       specialty: this.parseJson(row.specialty),
@@ -505,13 +755,24 @@ export class SqliteStore implements FhirStore {
       priority: row.priority,
       description: row.description,
       slot: this.parseJson(row.slot_refs),
-      start: row.start,
-      end: row.end,
+      start: this.shiftDate(row.start),
+      end: this.shiftDate(row.end),
       created: row.created,
       comment: row.comment,
       patientInstruction: row.patient_instruction,
       participant: this.parseJson(row.participant),
       meta: { lastUpdated: row.meta_last_updated },
+    };
+  }
+
+  private rowToSlotHold(row: any): SlotHold {
+    return {
+      id: row.id,
+      slotId: row.slot_id,
+      holdToken: row.hold_token,
+      sessionId: row.session_id,
+      expiresAt: row.expires_at,
+      createdAt: row.created_at,
     };
   }
 

@@ -4,7 +4,7 @@
  * Generates realistic test data:
  * - 3 providers (Dr. Smith, Dr. Johnson, Dr. Williams)
  * - Each seeing 50-60 patients per day
- * - 30 days of future appointments
+ * - 180 days (6 months) of future appointments
  * - Realistic scheduling patterns (8am-5pm, 15-30 min slots)
  */
 
@@ -104,7 +104,7 @@ function isDayInSchedule(date: Date, daysPerWeek: number[]): boolean {
   return daysPerWeek.includes(date.getDay());
 }
 
-async function generateSchedulesAndSlots(store: SqliteStore, daysAhead: number = 30) {
+async function generateSchedulesAndSlots(store: SqliteStore, daysAhead: number = 180) {
   console.log('🏥 Generating schedules and slots for providers...');
   
   const today = new Date();
@@ -200,9 +200,12 @@ async function generateAppointments(store: SqliteStore, scheduleIds: { [key: str
       status: 'free',
     });
 
+    // Shuffle slots to distribute appointments evenly across all dates
+    const shuffledSlots = [...allSlots].sort(() => Math.random() - 0.5);
+    
     // Book appointments for a percentage of available slots
     const slotsToBook = Math.floor(allSlots.length * fillRate);
-    const selectedSlots = allSlots.slice(0, slotsToBook);
+    const selectedSlots = shuffledSlots.slice(0, slotsToBook);
 
     for (const slot of selectedSlots) {
       // Generate patient
@@ -270,7 +273,7 @@ async function generateStatistics(store: SqliteStore) {
   
   // Calculate appointments per day
   const appointmentsPerProvider = Math.floor(appointments.length / PROVIDERS.length);
-  const daysWithAppointments = 30 * 5 / 7; // Approx working days
+  const daysWithAppointments = 180 * 5 / 7; // Approx working days
   const avgPerDay = Math.floor(appointmentsPerProvider / daysWithAppointments);
   
   console.log(`  Avg per provider/day: ~${avgPerDay} appointments`);
@@ -294,11 +297,18 @@ async function main() {
     await store.deleteAllSchedules();
     console.log('✓ Data cleared\n');
 
-    // Generate schedules and slots
-    const scheduleIds = await generateSchedulesAndSlots(store, 30);
+    // Store the generation date for dynamic date shifting
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    store.setGenerationDate(today.toISOString());
+    console.log(`📅 Generation date set to: ${today.toISOString().split('T')[0]}`);
+    console.log('   (Dates will auto-shift to stay relative to today)\n');
 
-    // Generate appointments (75% fill rate)
-    await generateAppointments(store, scheduleIds, 0.75);
+    // Generate schedules and slots (6 months ahead)
+    const scheduleIds = await generateSchedulesAndSlots(store, 180);
+
+    // Generate appointments (50% fill rate - leaves availability throughout)
+    await generateAppointments(store, scheduleIds, 0.50);
 
     // Show statistics
     await generateStatistics(store);

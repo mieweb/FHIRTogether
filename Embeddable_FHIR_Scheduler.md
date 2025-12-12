@@ -498,29 +498,61 @@ function BookingForm({ questionnaireFormData, onQuestionnaireChange }) {
 
 ## 🛠️ Implementation Phases
 
-### Phase 1: Core Infrastructure
-- [ ] Create package structure with Vite + TypeScript
-- [ ] Implement Zustand store with basic state
-- [ ] Create FHIR API client
-- [ ] Build ProviderList component
+### Phase 1: Core Infrastructure ✅
+- [x] Create package structure with Vite + TypeScript
+- [x] Implement Zustand store with basic state
+- [x] Create FHIR API client
+- [x] Build ProviderList component
 
-### Phase 2: Slot Selection
-- [ ] Build SlotCalendar with date picker
-- [ ] Implement slot hold API endpoints on server
-- [ ] Add hold/release logic to store
-- [ ] Display hold countdown timer
+### Phase 2: Slot Selection ✅
+- [x] Build SlotCalendar with date picker
+- [x] Implement slot hold API endpoints on server
+- [x] Add hold/release logic to store
+- [x] Display hold countdown timer
 
-### Phase 3: Booking Flow
-- [ ] Create BookingForm with patient info fields
-- [ ] Integrate QuestionnaireRenderer
-- [ ] Implement booking submission with hold validation
-- [ ] Build Confirmation component
+### Phase 3: Booking Flow ✅
+- [x] Create BookingForm with patient info fields
+- [x] Integrate QuestionnaireRenderer using https://github.com/mieweb/questionnaire-builder/
+- [x] Implement booking submission with hold validation
+- [x] Build Confirmation component
 
-### Phase 4: Polish & Distribution
-- [ ] Create standalone Web Component bundle
-- [ ] Add Tailwind styles with CSS purging
+### Phase 4: Polish & Distribution 🔄
+- [x] Create standalone Web Component bundle
+- [x] Add styles (plain CSS for compatibility)
+- [x] Add Playwright E2E test scaffolding
 - [ ] Write comprehensive tests
 - [ ] Publish to npm
+
+### Phase 5: Identity Management
+
+> 📖 See [AUTH.md](packages/fhir-scheduler/docs/AUTH.md) for complete documentation.
+
+- [ ] **Auth mode support** — `anonymous`, `token`, `callback`, `smart` modes
+- [ ] **Token injection**
+  - [ ] Accept static `accessToken` prop
+  - [ ] Support `getAccessToken()` async refresh function
+  - [ ] Auto-attach Bearer token to FHIR requests
+- [ ] **Anonymous booking with verification**
+  - [ ] Email verification flow (send/verify callbacks)
+  - [ ] SMS verification via host-provided gateway
+  - [ ] Optional CAPTCHA integration
+- [ ] **Identity callback pattern**
+  - [ ] `onIdentityRequired` hook for host-controlled auth
+  - [ ] Support OAuth popup/redirect flows
+  - [ ] Handle auth cancellation gracefully
+- [ ] **Pre-populated user info**
+  - [ ] Accept `user` prop with known identity
+  - [ ] Skip patient info fields if verified user provided
+  - [ ] Link to existing FHIR Patient resource
+- [ ] **SMART on FHIR launch** (optional)
+  - [ ] EHR launch context support
+  - [ ] Standalone launch with authorization
+  - [ ] Token refresh handling
+- [ ] **Post-booking notifications**
+  - [ ] Calendar integration (Google Calendar, Outlook) via email
+  - [ ] SMS reminders via host-provided gateway
+  - [ ] Cancelation/reschedule links
+
 
 ---
 

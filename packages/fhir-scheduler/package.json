@@ -1,0 +1,73 @@
+{
+  "name": "@mieweb/fhir-scheduler",
+  "version": "0.1.0",
+  "description": "Embeddable FHIR scheduling widget for browsing provider schedules and booking appointments",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./standalone": {
+      "import": "./dist/standalone.js",
+      "types": "./dist/standalone.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vite build --config vite.config.standalone.ts",
+    "build:lib": "vite build",
+    "build:standalone": "vite build --config vite.config.standalone.ts",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "screenshots": "playwright test tests/screenshots.spec.ts"
+  },
+  "keywords": [
+    "fhir",
+    "scheduler",
+    "appointments",
+    "healthcare",
+    "react",
+    "web-component"
+  ],
+  "author": "MieWeb",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@mieweb/forms-renderer": "^0.1.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/react": "^18.2.45",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.10",
+    "vite-plugin-dts": "^3.7.0"
+  }
+}

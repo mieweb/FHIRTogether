@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "generate-data": "tsx src/examples/generateBusyOffice.ts",
+    "import-seed": "tsx src/examples/importSeedData.ts",
     "hl7-test": "tsx src/examples/testHL7.ts",
     "test": "jest",
     "lint": "eslint src --ext .ts"

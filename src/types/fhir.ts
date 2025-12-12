@@ -137,6 +137,18 @@ export interface FhirAppointmentQuery {
 }
 
 /**
+ * Slot Hold for preventing double-booking during checkout
+ */
+export interface SlotHold {
+  id: string;
+  slotId: string;
+  holdToken: string;
+  sessionId: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/**
  * Store Interface
  */
 export interface FhirStore {
@@ -163,6 +175,13 @@ export interface FhirStore {
   updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment>;
   deleteAppointment(id: string): Promise<void>;
   deleteAllAppointments(): Promise<void>;
+
+  // Slot hold operations
+  holdSlot(slotId: string, sessionId: string, durationMinutes: number): Promise<SlotHold>;
+  releaseHold(holdToken: string): Promise<void>;
+  getActiveHold(slotId: string): Promise<SlotHold | null>;
+  getHoldByToken(holdToken: string): Promise<SlotHold | null>;
+  cleanupExpiredHolds(): Promise<number>;
 
   // Utility
   initialize(): Promise<void>;

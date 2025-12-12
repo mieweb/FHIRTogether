@@ -5,6 +5,16 @@ interface SlotParams {
   id: string;
 }
 
+interface SlotHoldParams {
+  id: string;
+  token?: string;
+}
+
+interface HoldRequestBody {
+  durationMinutes?: number;
+  sessionId: string;
+}
+
 export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
   // GET /Slot - Search for slots
   fastify.get<{ Querystring: FhirSlotQuery }>(
@@ -209,12 +219,170 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
+    async (_request: FastifyRequest, reply: FastifyReply) => {
       if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
         return reply.code(403).send({ error: 'Test endpoints disabled' });
       }
       
       await store.deleteAllSlots();
+      return reply.code(204).send();
+    }
+  );
+
+  // ==================== SLOT HOLD OPERATIONS ====================
+
+  // POST /Slot/:id/$hold - Acquire hold on a slot
+  fastify.post<{ Params: SlotHoldParams; Body: HoldRequestBody }>(
+    '/Slot/:id/$hold',
+    {
+      schema: {
+        description: 'Acquire a temporary hold on a slot to prevent double-booking',
+        tags: ['Slot'],
+        params: {
+          type: 'object', additionalProperties: true,
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        body: {
+          type: 'object', additionalProperties: true,
+          required: ['sessionId'],
+          properties: {
+            durationMinutes: { type: 'number', default: 5, description: 'How long to hold the slot (1-30 minutes)' },
+            sessionId: { type: 'string', description: 'Unique session identifier for the client' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object', additionalProperties: true,
+            description: 'Slot hold information',
+            properties: {
+              holdToken: { type: 'string' },
+              slotId: { type: 'string' },
+              expiresAt: { type: 'string' },
+              status: { type: 'string' },
+            },
+          },
+          409: {
+            type: 'object', additionalProperties: true,
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: SlotHoldParams; Body: HoldRequestBody }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      const { durationMinutes = 5, sessionId } = request.body;
+
+      // Validate duration (1-30 minutes)
+      const validDuration = Math.min(30, Math.max(1, durationMinutes));
+
+      try {
+        const hold = await store.holdSlot(id, sessionId, validDuration);
+        return reply.send({
+          holdToken: hold.holdToken,
+          slotId: hold.slotId,
+          expiresAt: hold.expiresAt,
+          status: 'held',
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to hold slot';
+        if (message.includes('already held') || message.includes('not available')) {
+          return reply.code(409).send({ error: message });
+        }
+        if (message.includes('not found')) {
+          return reply.code(404).send({ error: message });
+        }
+        throw err;
+      }
+    }
+  );
+
+  // GET /Slot/:id/$hold - Check if slot is held
+  fastify.get<{ Params: SlotHoldParams }>(
+    '/Slot/:id/$hold',
+    {
+      schema: {
+        description: 'Check if a slot currently has an active hold',
+        tags: ['Slot'],
+        params: {
+          type: 'object', additionalProperties: true,
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object', additionalProperties: true,
+            description: 'Active hold information',
+          },
+          404: {
+            type: 'object', additionalProperties: true,
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: SlotHoldParams }>, reply: FastifyReply) => {
+      const { id } = request.params;
+      
+      const hold = await store.getActiveHold(id);
+      
+      if (!hold) {
+        return reply.code(404).send({ error: 'No active hold on this slot' });
+      }
+
+      return reply.send({
+        slotId: hold.slotId,
+        expiresAt: hold.expiresAt,
+        status: 'held',
+      });
+    }
+  );
+
+  // DELETE /Slot/:id/$hold/:token - Release a hold
+  fastify.delete<{ Params: SlotHoldParams }>(
+    '/Slot/:id/$hold/:token',
+    {
+      schema: {
+        description: 'Release a slot hold',
+        tags: ['Slot'],
+        params: {
+          type: 'object', additionalProperties: true,
+          required: ['id', 'token'],
+          properties: {
+            id: { type: 'string' },
+            token: { type: 'string' },
+          },
+        },
+        response: {
+          204: {
+            type: 'null',
+            description: 'Hold released successfully',
+          },
+          404: {
+            type: 'object', additionalProperties: true,
+            properties: {
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: SlotHoldParams }>, reply: FastifyReply) => {
+      const { token } = request.params;
+      
+      if (!token) {
+        return reply.code(400).send({ error: 'Hold token required' });
+      }
+
+      await store.releaseHold(token);
       return reply.code(204).send();
     }
   );
