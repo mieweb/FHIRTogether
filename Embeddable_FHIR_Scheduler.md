@@ -512,7 +512,7 @@ function BookingForm({ questionnaireFormData, onQuestionnaireChange }) {
 
 ### Phase 3: Booking Flow ✅
 - [x] Create BookingForm with patient info fields
-- [ ] Integrate QuestionnaireRenderer (placeholder added) using https://github.com/mieweb/questionnaire-builder/
+- [x] Integrate QuestionnaireRenderer using https://github.com/mieweb/questionnaire-builder/
 - [x] Implement booking submission with hold validation
 - [x] Build Confirmation component
 

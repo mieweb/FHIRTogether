@@ -2,6 +2,10 @@
  * FHIR Resource Types (subset for scheduler)
  */
 
+// Import FormData from forms-renderer for questionnaire props
+import type { FormData as FormsRendererFormData } from '@mieweb/forms-renderer';
+export type { FormsRendererFormData };
+
 export interface FhirResource {
   resourceType: string;
   id?: string;
@@ -135,6 +139,7 @@ export interface QuestionnaireResponse extends FhirResource {
   questionnaire?: string;
   status: 'in-progress' | 'completed' | 'amended' | 'entered-in-error' | 'stopped';
   authored?: string;
+  subject?: { reference: string };
   item?: QuestionnaireResponseItem[];
 }
 
@@ -152,6 +157,38 @@ export interface QuestionnaireResponseItem {
 }
 
 /**
+ * Questionnaire Form Data (MIE Forms schema)
+ * Represents the input format for @mieweb/forms-renderer
+ */
+export interface QuestionnaireFormData {
+  schemaType?: 'mieforms-v1.0' | 'surveyjs';
+  title?: string;
+  fields: QuestionnaireField[];
+}
+
+/**
+ * Questionnaire Field (simplified for type hints)
+ */
+export interface QuestionnaireField {
+  id: string;
+  fieldType: 'text' | 'longtext' | 'multitext' | 'radio' | 'check' | 'dropdown' | 'boolean' | 'section' | string;
+  question?: string;
+  title?: string;
+  answer?: string;
+  selected?: string | string[] | null;
+  options?: Array<{ id: string; value: string }>;
+  fields?: QuestionnaireField[];
+  enableWhen?: {
+    logic: 'AND' | 'OR';
+    conditions: Array<{
+      targetId: string;
+      operator: 'equals' | 'notEquals' | 'includes' | 'notIncludes';
+      value: string;
+    }>;
+  };
+}
+
+/**
  * Scheduler Widget Props
  */
 export interface SchedulerWidgetProps {
@@ -159,8 +196,8 @@ export interface SchedulerWidgetProps {
   fhirBaseUrl: string;
   /** Pre-select a specific provider (skip provider list) */
   providerId?: string;
-  /** MIE Forms or questionnaire schema for intake */
-  questionnaireFormData?: unknown;
+  /** MIE Forms or questionnaire schema for intake (used for new patient flow) */
+  questionnaireFormData?: FormsRendererFormData;
   /** How long to hold a slot during booking (minutes) */
   holdDurationMinutes?: number;
   /** Callback when booking succeeds */
@@ -172,6 +209,11 @@ export interface SchedulerWidgetProps {
 }
 
 /**
+ * Visit type for scheduling flow
+ */
+export type VisitType = 'new-patient' | 'follow-up';
+
+/**
  * Scheduler workflow steps
  */
-export type SchedulerStep = 'providers' | 'calendar' | 'booking' | 'confirmation';
+export type SchedulerStep = 'visit-type' | 'questionnaire' | 'providers' | 'calendar' | 'booking' | 'confirmation';

@@ -347,7 +347,7 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
   );
 
   // DELETE /Slot/:id/$hold/:token - Release a hold
-  fastify.delete<{ Params: ReleaseHoldParams }>(
+  fastify.delete<{ Params: SlotHoldParams }>(
     '/Slot/:id/$hold/:token',
     {
       schema: {

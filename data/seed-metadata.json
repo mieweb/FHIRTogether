@@ -1,0 +1,5 @@
+{
+  "generationDate": "2025-12-12T05:00:00.000Z",
+  "description": "Seed data generation metadata - commit this file to git",
+  "note": "Dates in slots/appointments are shifted by (today - generationDate) days"
+}
