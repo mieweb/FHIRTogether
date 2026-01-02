@@ -1,0 +1,38 @@
+name: Proxmox Deployment
+
+on:
+  push:     # Updates existing containers
+  create:   # Creates containers for new branches
+  delete:   # Removes containers when branches are deleted
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy FHIRTogether to Proxmox
+        uses: maxklema/proxmox-launchpad@main
+        with:
+          # Required Proxmox credentials
+          proxmox_username: ${{ secrets.PROXMOX_USERNAME }}
+          proxmox_password: ${{ secrets.PROXMOX_PASSWORD }}
+          
+          # Container configuration
+          http_port: 4010
+          linux_distribution: debian
+          
+          # Optional: SSH access (recommended for security)
+          public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+          
+          # Application deployment configuration
+          project_root: ""  # Repository root
+          install_command: "npm install"
+          build_command: "npm run build"
+          start_command: "npm start"
+          runtime_language: "nodejs"
+          
+          # Environment variables for the application
+          container_env_vars: '{"NODE_ENV": "production", "PORT": "4010"}'
+          
+          # Services required by FHIRTogether
+          # SQLite is file-based, so no external database service needed
+          services: '[]'
