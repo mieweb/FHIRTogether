@@ -55,23 +55,56 @@
     </div>
     
     <div class="demo-note">
-      <strong>Demo:</strong> This widget connects to the local FHIRTogether server at localhost:4010.
+      <strong>Demo:</strong> This widget connects to the FHIRTogether server at the current origin (localhost:4010 for local development).
       Make sure to run <code>npm run generate-data</code> to populate test providers and slots.
     </div>
   </div>
 
-  <script type="importmap">
-    {
-      "imports": {
-        "react": "https://esm.sh/react@18",
-        "react-dom/client": "https://esm.sh/react-dom@18/client"
-      }
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script>
+    const React = window.React;
+    const ReactDOM = window.ReactDOM;
+    
+    // Simple zustand-like store implementation (no external dependency)
+    function createStore(initializer) {
+      let state;
+      const listeners = new Set();
+      
+      const setState = (partial) => {
+        const nextState = typeof partial === 'function' ? partial(state) : partial;
+        if (!Object.is(nextState, state)) {
+          state = Object.assign({}, state, nextState);
+          listeners.forEach(listener => listener(state));
+        }
+      };
+      
+      const getState = () => state;
+      
+      const subscribe = (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      };
+      
+      state = initializer(setState, getState);
+      
+      return { getState, setState, subscribe };
     }
-  </script>
-  <script type="module">
-    import React from 'react';
-    import ReactDOM from 'react-dom/client';
-    import { create } from 'https://esm.sh/zustand@4?external=react';
+    
+    function create(initializer) {
+      const store = createStore(initializer);
+      
+      return function useStore(selector) {
+        const [, forceRender] = React.useReducer(c => c + 1, 0);
+        
+        React.useEffect(() => {
+          return store.subscribe(forceRender);
+        }, []);
+        
+        const state = store.getState();
+        return selector ? selector(state) : state;
+      };
+    }
 
     // Inline styles (from scheduler.css)
     const styles = `
@@ -227,7 +260,10 @@
     styleEl.textContent = styles;
     document.head.appendChild(styleEl);
 
-    const FHIR_BASE_URL = 'http://localhost:4010';
+    // Determine FHIR API base URL - use same origin in production, localhost for development
+    const FHIR_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:4010'
+      : window.location.origin;
 
     // Simple store
     const useStore = create((set, get) => ({
