@@ -72,9 +72,10 @@
       const listeners = new Set();
       
       const setState = (partial) => {
-        const nextState = typeof partial === 'function' ? partial(state) : partial;
+        const partialState = typeof partial === 'function' ? partial(state) : partial;
+        const nextState = Object.assign({}, state, partialState);
         if (!Object.is(nextState, state)) {
-          state = Object.assign({}, state, nextState);
+          state = nextState;
           listeners.forEach(listener => listener(state));
         }
       };
