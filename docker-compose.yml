@@ -6,9 +6,9 @@ services:
     ports:
       - "4010:4010"
     volumes:
-      - .:/app
-      - /app/node_modules
+      # Persist the database outside the container
+      - ./data:/app/data
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
       - SQLITE_DB_PATH=/app/data/fhirtogether.db
     command: npm run dev
