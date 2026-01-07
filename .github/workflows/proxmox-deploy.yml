@@ -1,9 +1,11 @@
 name: Proxmox Deployment
 
+# on:
+  # push:     # Updates existing containers
+  # create:   # Creates containers for new branches
+  # delete:   # Removes containers when branches are deleted
 on:
-  push:     # Updates existing containers
-  create:   # Creates containers for new branches
-  delete:   # Removes containers when branches are deleted
+  workflow_dispatch
 
 jobs:
   deploy:
@@ -27,7 +29,7 @@ jobs:
           project_root: ""  # Repository root
           install_command: "npm install"
           build_command: "npm run build"
-          start_command: "npm start"
+          start_command: "PORT=4010 npm start"
           runtime_language: "nodejs"
           
           # Environment variables for the application
