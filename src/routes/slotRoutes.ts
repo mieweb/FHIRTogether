@@ -15,6 +15,20 @@ interface HoldRequestBody {
   sessionId: string;
 }
 
+/**
+ * Parse FHIR date search parameter prefixes (eq, ne, gt, lt, ge, le)
+ * Returns the prefix and the date value separately
+ */
+function parseFhirDatePrefix(value: string): { prefix: string; value: string } {
+  const prefixes = ['eq', 'ne', 'gt', 'lt', 'ge', 'le'];
+  for (const prefix of prefixes) {
+    if (value.startsWith(prefix)) {
+      return { prefix, value: value.slice(prefix.length) };
+    }
+  }
+  return { prefix: 'eq', value };
+}
+
 export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
   // GET /Slot - Search for slots
   fastify.get<{ Querystring: FhirSlotQuery }>(
@@ -28,8 +42,8 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
           properties: {
             schedule: { type: 'string', description: 'Schedule reference' },
             status: { type: 'string', enum: ['busy', 'free', 'busy-unavailable', 'busy-tentative'] },
-            start: { type: 'string', format: 'date-time', description: 'Start time filter' },
-            end: { type: 'string', format: 'date-time', description: 'End time filter' },
+            start: { type: 'string', description: 'Start time filter (supports FHIR prefixes: eq, ne, gt, lt, ge, le)' },
+            end: { type: 'string', description: 'End time filter (supports FHIR prefixes: eq, ne, gt, lt, ge, le)' },
             _count: { type: 'number', description: 'Max results to return' },
           },
         },
@@ -42,7 +56,16 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
       },
     },
     async (request: FastifyRequest<{ Querystring: FhirSlotQuery }>, reply: FastifyReply) => {
-      const slots = await store.getSlots(request.query);
+      // Parse FHIR date prefixes and normalize the query
+      const normalizedQuery = { ...request.query };
+      if (normalizedQuery.start) {
+        normalizedQuery.start = parseFhirDatePrefix(normalizedQuery.start).value;
+      }
+      if (normalizedQuery.end) {
+        normalizedQuery.end = parseFhirDatePrefix(normalizedQuery.end).value;
+      }
+
+      const slots = await store.getSlots(normalizedQuery);
       
       const bundle: Bundle = {
         resourceType: 'Bundle',

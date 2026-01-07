@@ -2,7 +2,9 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import fastifyStatic from '@fastify/static';
 import { config } from 'dotenv';
+import path from 'path';
 import { SqliteStore } from './store/sqliteStore';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
@@ -83,6 +85,18 @@ async function buildServer() {
     staticCSP: false,
   });
 
+  // Register static file serving for the scheduler demo
+  await fastify.register(fastifyStatic, {
+    root: path.join(__dirname, '..', 'packages', 'fhir-scheduler'),
+    prefix: '/scheduler/',
+    decorateReply: false,
+  });
+
+  // Redirect /demo to the scheduler demo page
+  fastify.get('/demo', async (_request, reply) => {
+    return reply.redirect('/scheduler/demo.html');
+  });
+
   // Initialize store
   let store;
   if (STORE_BACKEND === 'sqlite') {
@@ -117,6 +131,7 @@ async function buildServer() {
       version: '1.0.0',
       description: 'FHIR-compliant gateway and test server for schedule and appointment availability',
       documentation: '/docs',
+      demo: '/demo',
       fhirVersion: 'R4',
       endpoints: {
         schedule: '/Schedule',
@@ -125,6 +140,7 @@ async function buildServer() {
         hl7: '/hl7/siu',
         hl7Status: '/hl7/status',
         health: '/health',
+        demo: '/demo',
       },
       hl7Socket: HL7_SOCKET_ENABLED ? {
         port: HL7_SOCKET_PORT,
@@ -189,7 +205,8 @@ async function start() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`📡 Server running at: http://${HOST}:${PORT}`);
     console.log(`📚 API Documentation: http://localhost:${PORT}/docs`);
-    console.log(`💾 Store Backend: ${STORE_BACKEND}`);
+    console.log(`�️  Scheduler Demo: http://localhost:${PORT}/demo`);
+    console.log(`�💾 Store Backend: ${STORE_BACKEND}`);
     console.log(`🧪 Test Endpoints: ${process.env.ENABLE_TEST_ENDPOINTS === 'true' ? 'Enabled' : 'Disabled'}`);
     if (HL7_SOCKET_ENABLED) {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
