@@ -109,12 +109,17 @@ const intakeQuestionnaire: FormsRendererFormData = {
   ],
 };
 
+// Determine FHIR API base URL - use same origin in production, localhost for development
+const fhirBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:4010'
+  : window.location.origin;
+
 const root = createRoot(document.getElementById('scheduler-root')!);
 
 root.render(
   <React.StrictMode>
     <SchedulerWidget
-      fhirBaseUrl="http://localhost:4010"
+      fhirBaseUrl={fhirBaseUrl}
       holdDurationMinutes={5}
       questionnaireFormData={intakeQuestionnaire}
       onComplete={(appointment: Appointment) => {
