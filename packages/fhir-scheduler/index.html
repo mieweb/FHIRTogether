@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FHIR Scheduler Demo</title>
+  <link rel="stylesheet" href="dist/style.css">
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -47,16 +48,137 @@
 <body>
   <header>
     <h1>🗓️ FHIR Scheduler Widget</h1>
-    <p>Embeddable appointment scheduling component</p>
+    <p>Embeddable appointment scheduling component with patient intake form</p>
   </header>
 
   <div class="info-box">
-    <strong>Demo:</strong> This widget connects to the local FHIRTogether server at localhost:4010. 
+    <strong>Demo:</strong> This widget connects to the FHIRTogether server. 
     Make sure to run <code>npm run generate-data</code> to populate test providers and slots.
   </div>
 
-  <div id="scheduler-root"></div>
+  <div id="scheduler-root">
+    <fhir-scheduler id="scheduler" fhir-base-url="" hold-duration="5"></fhir-scheduler>
+  </div>
 
-  <script type="module" src="/src/demo.tsx"></script>
+  <script type="module">
+    import './dist/standalone.js';
+
+    // Determine FHIR API base URL - use same origin
+    const fhirBaseUrl = window.location.origin;
+
+    // Sample intake questionnaire for screening patients
+    const intakeQuestionnaire = {
+      schemaType: 'mieforms-v1.0',
+      title: 'Patient Intake Questionnaire',
+      fields: [
+        {
+          id: 'sec-visit',
+          fieldType: 'section',
+          title: 'Visit Information',
+          fields: [
+            {
+              id: 'q-visit-type',
+              fieldType: 'radio',
+              question: 'What type of visit do you need?',
+              options: [
+                { id: 'new-patient', value: 'New Patient Visit' },
+                { id: 'urgent', value: 'Urgent Care' },
+                { id: 'wellness', value: 'Wellness Check / Physical' },
+              ],
+              selected: null,
+            },
+            {
+              id: 'q-reason',
+              fieldType: 'text',
+              question: 'Brief description of your reason for visit',
+              answer: '',
+            },
+          ],
+        },
+        {
+          id: 'sec-symptoms',
+          fieldType: 'section',
+          title: 'Current Symptoms',
+          fields: [
+            {
+              id: 'q-symptoms',
+              fieldType: 'check',
+              question: 'Are you experiencing any of the following? (Select all that apply)',
+              options: [
+                { id: 'sym-fever', value: 'Fever or chills' },
+                { id: 'sym-cough', value: 'Cough or shortness of breath' },
+                { id: 'sym-pain', value: 'Pain or discomfort' },
+                { id: 'sym-fatigue', value: 'Fatigue or weakness' },
+                { id: 'sym-none', value: 'None of the above' },
+              ],
+              selected: [],
+            },
+            {
+              id: 'q-symptom-duration',
+              fieldType: 'radio',
+              question: 'How long have you been experiencing these symptoms?',
+              options: [
+                { id: 'dur-days', value: 'Less than 3 days' },
+                { id: 'dur-week', value: '3-7 days' },
+                { id: 'dur-weeks', value: '1-2 weeks' },
+                { id: 'dur-longer', value: 'More than 2 weeks' },
+              ],
+              selected: null,
+              enableWhen: {
+                logic: 'AND',
+                conditions: [
+                  { targetId: 'q-symptoms', operator: 'notIncludes', value: 'sym-none' },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          id: 'sec-insurance',
+          fieldType: 'section',
+          title: 'Insurance Information',
+          fields: [
+            {
+              id: 'q-has-insurance',
+              fieldType: 'radio',
+              question: 'Do you have health insurance?',
+              options: [
+                { id: 'ins-yes', value: 'Yes' },
+                { id: 'ins-no', value: 'No' },
+              ],
+              selected: null,
+            },
+            {
+              id: 'q-insurance-provider',
+              fieldType: 'text',
+              question: 'Insurance provider name',
+              answer: '',
+              enableWhen: {
+                logic: 'AND',
+                conditions: [
+                  { targetId: 'q-has-insurance', operator: 'equals', value: 'ins-yes' },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    // Configure the scheduler web component
+    const scheduler = document.getElementById('scheduler');
+    scheduler.setAttribute('fhir-base-url', fhirBaseUrl);
+    scheduler.questionnaireFormData = intakeQuestionnaire;
+
+    // Handle events
+    scheduler.addEventListener('complete', (e) => {
+      console.log('Appointment booked:', e.detail);
+      alert(`Appointment booked!\nID: ${e.detail.id}\nStart: ${e.detail.start}`);
+    });
+
+    scheduler.addEventListener('error', (e) => {
+      console.error('Scheduler error:', e.detail);
+    });
+  </script>
 </body>
 </html>

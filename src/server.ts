@@ -94,7 +94,7 @@ async function buildServer() {
 
   // Redirect /demo to the scheduler demo page
   fastify.get('/demo', async (_request, reply) => {
-    return reply.redirect('/scheduler/demo.html');
+    return reply.redirect('/scheduler/index.html');
   });
 
   // Initialize store
