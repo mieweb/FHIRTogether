@@ -10,5 +10,5 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - SQLITE_DB_PATH=/app/data/database.sqlite3
+      - SQLITE_DB_PATH=/app/data/fhirtogether.db
     command: npm run dev

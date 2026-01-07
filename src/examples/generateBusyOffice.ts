@@ -100,6 +100,29 @@ function setTime(date: Date, hours: number, minutes: number): Date {
   return result;
 }
 
+/**
+ * Format a Date as an ISO 8601 string with local timezone offset
+ * This ensures appointment times represent the office's local time
+ * and display correctly regardless of the viewer's timezone.
+ * Example: 2026-01-07T08:00:00-05:00 (Eastern Standard Time)
+ */
+function toLocalISOString(date: Date): string {
+  const offset = date.getTimezoneOffset();
+  const sign = offset <= 0 ? '+' : '-';
+  const absOffset = Math.abs(offset);
+  const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
+  const minutes = String(absOffset % 60).padStart(2, '0');
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  const second = String(date.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}${sign}${hours}:${minutes}`;
+}
+
 function isDayInSchedule(date: Date, daysPerWeek: number[]): boolean {
   return daysPerWeek.includes(date.getDay());
 }
@@ -164,8 +187,8 @@ async function generateSchedulesAndSlots(store: SqliteStore, daysAhead: number =
             display: provider.name,
           },
           status: 'free',
-          start: currentTime.toISOString(),
-          end: slotEnd.toISOString(),
+          start: toLocalISOString(currentTime),
+          end: toLocalISOString(slotEnd),
           serviceType: [
             {
               text: provider.specialty,

@@ -205,8 +205,8 @@ async function start() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`📡 Server running at: http://${HOST}:${PORT}`);
     console.log(`📚 API Documentation: http://localhost:${PORT}/docs`);
-    console.log(`�️  Scheduler Demo: http://localhost:${PORT}/demo`);
-    console.log(`�💾 Store Backend: ${STORE_BACKEND}`);
+    console.log(`🗓️ Scheduler Demo: http://localhost:${PORT}/demo`);
+    console.log(`💾 Store Backend: ${STORE_BACKEND}`);
     console.log(`🧪 Test Endpoints: ${process.env.ENABLE_TEST_ENDPOINTS === 'true' ? 'Enabled' : 'Disabled'}`);
     if (HL7_SOCKET_ENABLED) {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
