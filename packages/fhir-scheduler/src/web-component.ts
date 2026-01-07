@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { SchedulerWidget } from './components/SchedulerWidget';
 import type { Appointment, FormsRendererFormData } from './types';
+import schedulerStyles from './styles/scheduler.css?inline';
 
 /**
  * FHIR Scheduler Web Component
@@ -71,6 +72,7 @@ class FhirSchedulerElement extends HTMLElement {
             display: block;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           }
+          ${schedulerStyles}
         </style>
         <div id="fhir-scheduler-container"></div>
       `;
