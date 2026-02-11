@@ -44,6 +44,16 @@ async function buildServer() {
     origin: true,
   });
 
+  // Add content type parser for text/plain (for raw HL7 messages)
+  fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, body);
+  });
+
+  // Also handle x-application/hl7-v2+er7 (standard HL7 MIME type)
+  fastify.addContentTypeParser('x-application/hl7-v2+er7', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, body);
+  });
+
   // Register Swagger
   await fastify.register(swagger, {
     openapi: {

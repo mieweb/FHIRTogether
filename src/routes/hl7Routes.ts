@@ -38,8 +38,9 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
     Body: HL7MessageRequest | string;
   }>('/hl7/siu', {
     schema: {
-      description: 'Receive HL7v2 SIU scheduling message',
+      description: 'Receive HL7v2 SIU scheduling message. Accepts raw HL7 text (text/plain, x-application/hl7-v2+er7) or JSON wrapper (application/json). Returns raw HL7 ACK for text requests, or JSON-wrapped ACK for JSON requests.',
       tags: ['HL7'],
+      consumes: ['text/plain', 'x-application/hl7-v2+er7', 'application/json'],
       body: {
         oneOf: [
           {
@@ -56,29 +57,50 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           },
         ],
       },
+      produces: ['x-application/hl7-v2+er7', 'text/plain', 'application/json'],
       response: {
         200: {
-          description: 'ACK response',
-          type: 'object',
-          additionalProperties: true,
-          properties: {
-            ack: { type: 'string', description: 'HL7 ACK message' },
-            status: { type: 'string', description: 'Processing status' },
-            appointmentId: { type: 'string', description: 'Created/updated appointment ID' },
-            action: { type: 'string', description: 'Action performed' },
-          },
+          description: 'HL7 ACK message (AA - Application Accepted). Raw HL7 for text requests, JSON for JSON requests.',
+          oneOf: [
+            { type: 'string' },
+            { type: 'object', properties: { message: { type: 'string' } } },
+          ],
         },
         400: {
-          description: 'Error response',
-          type: 'object',
-          properties: {
-            error: { type: 'string' },
-            ack: { type: 'string' },
-          },
+          description: 'HL7 ACK message (AR - Application Rejected, message format error)',
+          oneOf: [
+            { type: 'string' },
+            { type: 'object', properties: { message: { type: 'string' } } },
+          ],
+        },
+        500: {
+          description: 'HL7 ACK message (AE - Application Error, processing failure)',
+          oneOf: [
+            { type: 'string' },
+            { type: 'object', properties: { message: { type: 'string' } } },
+          ],
         },
       },
     },
   }, async (request: FastifyRequest<{ Body: HL7MessageRequest | string }>, reply: FastifyReply) => {
+    // Determine if request was JSON to return appropriate response format
+    const contentType = request.headers['content-type'] || '';
+    const isJsonRequest = contentType.includes('application/json');
+    
+    // Helper to send ACK response in the appropriate format
+    const sendAck = (ackMessage: string, status: number = 200) => {
+      if (isJsonRequest) {
+        return reply
+          .status(status)
+          .header('Content-Type', 'application/json')
+          .send({ message: ackMessage });
+      }
+      return reply
+        .status(status)
+        .header('Content-Type', 'x-application/hl7-v2+er7')
+        .send(ackMessage);
+    };
+    
     try {
       // Extract raw message from body
       let rawMessage: string;
@@ -90,6 +112,13 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         rawMessage = request.body.message;
         wrapResponse = request.body.wrapMLLP || false;
       }
+      
+      // Normalize literal \n and \r sequences to actual control characters
+      // This handles messages sent as plain text with escaped newlines
+      rawMessage = rawMessage
+        .replace(/\\r\\n/g, '\r\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\n/g, '\n');
       
       // Parse the raw message first to validate and get control ID
       const parsed = parseRawMessage(rawMessage);
@@ -120,10 +149,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           ackMessage = wrapMLLP(ackMessage);
         }
         
-        return reply.status(400).send({
-          error: `Unsupported message type: ${parsed.messageType}`,
-          ack: ackMessage,
-        });
+        return sendAck(ackMessage, 400);
       }
       
       // Parse the full SIU message
@@ -186,19 +212,14 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           }
         }
         
-        // Create success ACK
+        // Create success ACK (AA - Application Accepted)
         const ack = createACKResponse(siuMessage.msh, 'AA', 'Message processed successfully');
         let ackMessage = buildACKMessage(ack);
         if (wrapResponse) {
           ackMessage = wrapMLLP(ackMessage);
         }
         
-        return reply.send({
-          ack: ackMessage,
-          status: 'success',
-          appointmentId,
-          action: fhirResult.action,
-        });
+        return sendAck(ackMessage, 200);
         
       } catch (storeError) {
         // Database/store error
@@ -214,10 +235,8 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           ackMessage = wrapMLLP(ackMessage);
         }
         
-        return reply.status(500).send({
-          error: `Store error: ${storeError instanceof Error ? storeError.message : 'Unknown error'}`,
-          ack: ackMessage,
-        });
+        // AE - Application Error (processing failure, can retry)
+        return sendAck(ackMessage, 500);
       }
       
     } catch (parseError) {
@@ -243,10 +262,8 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         { code: '100', text: 'Segment sequence error', severity: 'E' }
       );
       
-      return reply.status(400).send({
-        error: `Parse error: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`,
-        ack: buildACKMessage(ack),
-      });
+      // AR - Application Rejected (message format error, don't retry)
+      return sendAck(buildACKMessage(ack), 400);
     }
   });
 
