@@ -112,15 +112,42 @@ STORE_BACKEND=postgres
 Send HL7v2 scheduling messages (e.g., `SIU^S12`, `S13`, `S15`) to:
 
 ```
-POST /$hl7v2-ingest
+POST /hl7/siu
 ```
 
+**Option 1: Raw HL7 text** (Content-Type: `text/plain` or `x-application/hl7-v2+er7`)
+```
+MSH|^~\&|LEGACY_EHR|MAIN_HOSPITAL|FHIRTOGETHER|SCHEDULING_GATEWAY|20231209120000||SIU^S12|12345|P|2.3
+SCH|10001^10001|10001^10001|||10001|OFFICE^Office visit|reason|OFFICE|30|m|...
+PID|1||42||DOE^JOHN||19800101|M|||123 Main St^^City^ST^12345||5551234567
+...
+```
+
+**Option 2: JSON wrapper** (Content-Type: `application/json`)
 ```json
 {
   "message": "MSH|^~\\&|SCHED|...<raw HL7v2>",
-  "sourceSystem": "LegacyScheduler"
+  "wrapMLLP": false
 }
 ```
+
+**Response for text requests:** Raw HL7 ACK message
+```
+MSH|^~\&|FHIRTOGETHER|SCHEDULING_GATEWAY|LEGACY_EHR|MAIN_HOSPITAL|20231209120001||ACK^S12|ACK12345|P|2.3
+MSA|AA|12345|Message processed successfully
+```
+
+**Response for JSON requests:** JSON-wrapped ACK
+```json
+{
+  "message": "MSH|^~\\&|FHIRTOGETHER|SCHEDULING_GATEWAY|...\rMSA|AA|12345|Message processed successfully|||"
+}
+```
+
+**ACK Codes:**
+- `AA` (Application Accepted) - Message processed successfully
+- `AR` (Application Rejected) - Message format error, do not retry
+- `AE` (Application Error) - Processing failure, can retry
 
 The server parses the message and converts it into FHIR `Slot` and `Schedule` resources internally.
 
@@ -135,7 +162,7 @@ FHIR-compliant endpoints (all responses follow FHIR Bundles or resource schemas)
 | GET    | `/Schedule`      | Retrieve provider availability   |
 | POST   | `/Schedule`      | Define provider planning horizon |
 | POST   | `/Appointment`   | Book an appointment              |
-| POST   | `/$hl7v2-ingest` | Ingest HL7v2 scheduling msg      |
+| POST   | `/hl7/siu`       | Ingest HL7v2 SIU message (text or JSON) |
 
 ## 🧪 Test Server Mode
 

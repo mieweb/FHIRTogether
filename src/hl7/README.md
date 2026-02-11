@@ -42,17 +42,14 @@ HL7_TLS_CA=/path/to/ca.pem    # CA certificate (optional)
 
 ### POST /hl7/siu
 
-Receive SIU scheduling messages via HTTPS.
+Receive SIU scheduling messages via HTTPS. Accepts both raw HL7 text and JSON-wrapped messages.
 
-**Request Body (JSON):**
-```json
-{
-  "message": "MSH|^~\\&|LEGACY_EHR|MAIN_HOSPITAL|...",
-  "wrapMLLP": false
-}
-```
+**Accepted Content Types:**
+- `text/plain` - Raw HL7 message in body
+- `x-application/hl7-v2+er7` - Standard HL7 MIME type
+- `application/json` - JSON wrapper with `message` field
 
-**Request Body (Plain Text):**
+**Request Body (Plain Text):** `Content-Type: text/plain`
 ```
 MSH|^~\&|LEGACY_EHR|MAIN_HOSPITAL|FHIRTOGETHER|SCHEDULING_GATEWAY|20231209120000||SIU^S12|12345|P|2.3
 SCH|10001^10001|10001^10001|||10001|OFFICE^Office visit|reason for the appointment|OFFICE|30|m|...
@@ -60,15 +57,33 @@ PID|1||42||DOE^JOHN||19800101|M|||123 Main St^^City^ST^12345||5551234567|||S||99
 ...
 ```
 
-**Response:**
+**Request Body (JSON):** `Content-Type: application/json`
 ```json
 {
-  "ack": "MSH|^~\\&|FHIRTOGETHER|SCHEDULING_GATEWAY|LEGACY_EHR|MAIN_HOSPITAL|...\rMSA|AA|12345|Message processed successfully",
-  "status": "success",
-  "appointmentId": "apt-123",
-  "action": "create"
+  "message": "MSH|^~\\&|LEGACY_EHR|MAIN_HOSPITAL|...",
+  "wrapMLLP": false
 }
 ```
+
+**Response for text requests:** Raw HL7 ACK message (`Content-Type: x-application/hl7-v2+er7`)
+```
+MSH|^~\&|FHIRTOGETHER|SCHEDULING_GATEWAY|LEGACY_EHR|MAIN_HOSPITAL|20231209120001||ACK^S12|ACK12345|P|2.3
+MSA|AA|12345|Message processed successfully
+```
+
+**Response for JSON requests:** JSON-wrapped ACK (`Content-Type: application/json`)
+```json
+{
+  "message": "MSH|^~\\&|FHIRTOGETHER|SCHEDULING_GATEWAY|...\rMSA|AA|12345|Message processed successfully|||"
+}
+```
+
+**ACK Codes:**
+| Code | HTTP Status | Meaning |
+|------|-------------|-------------------------------------------|
+| AA   | 200         | Application Accepted - processed successfully |
+| AR   | 400         | Application Rejected - format error, don't retry |
+| AE   | 500         | Application Error - processing failure, can retry |
 
 ### POST /hl7/raw
 
