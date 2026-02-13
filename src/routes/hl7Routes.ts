@@ -17,6 +17,20 @@ import {
 import { siuToFhirResources } from '../hl7/converter';
 
 /**
+ * Find an existing appointment by its placer appointment ID.
+ * Returns the first match or null if no appointment carries that identifier.
+ */
+async function findAppointmentByPlacerId(
+  store: FhirStore,
+  placerApptId: string,
+): Promise<import('../types/fhir').Appointment | null> {
+  const appointments = await store.getAppointments({});
+  return appointments.find(apt =>
+    apt.identifier?.some(id => id.value === placerApptId)
+  ) ?? null;
+}
+
+/**
  * HL7 message request body interface
  */
 interface HL7MessageRequest {
@@ -175,11 +189,21 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           scheduleId = existingSchedules[0].id!;
         }
         
-        // Handle appointment based on action
+        // Deduplicate by placer appointment ID — update if we've seen this ID before
         const placerApptId = siuMessage.sch.placerAppointmentId?.idNumber;
+        const existingAppointment = placerApptId
+          ? await findAppointmentByPlacerId(store, placerApptId)
+          : null;
         
-        if (fhirResult.action === 'create') {
-          // Create new appointment
+        if (existingAppointment) {
+          // Update the existing appointment rather than creating a duplicate
+          const updatedAppointment = await store.updateAppointment(
+            existingAppointment.id!,
+            fhirResult.appointment
+          );
+          appointmentId = updatedAppointment.id;
+        } else {
+          // No match found — create new appointment
           const createdAppointment = await store.createAppointment(fhirResult.appointment);
           appointmentId = createdAppointment.id;
           
@@ -187,28 +211,6 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           if (fhirResult.slot) {
             fhirResult.slot.schedule.reference = `Schedule/${scheduleId}`;
             await store.createSlot(fhirResult.slot);
-          }
-        } else {
-          // Try to find existing appointment by identifier
-          let existingAppointment = null;
-          if (placerApptId) {
-            const appointments = await store.getAppointments({});
-            existingAppointment = appointments.find(apt => 
-              apt.identifier?.some(id => id.value === placerApptId)
-            );
-          }
-          
-          if (existingAppointment) {
-            // Update existing appointment
-            const updatedAppointment = await store.updateAppointment(
-              existingAppointment.id!,
-              fhirResult.appointment
-            );
-            appointmentId = updatedAppointment.id;
-          } else {
-            // Create new if not found (for updates to unknown appointments)
-            const createdAppointment = await store.createAppointment(fhirResult.appointment);
-            appointmentId = createdAppointment.id;
           }
         }
         
