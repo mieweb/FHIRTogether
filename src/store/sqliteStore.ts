@@ -98,6 +98,7 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slots_status ON slots(status);
       CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments(start);
       CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
+      CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier);
 
       CREATE TABLE IF NOT EXISTS slot_holds (
         id TEXT PRIMARY KEY,
@@ -119,6 +120,9 @@ export class SqliteStore implements FhirStore {
     if (!cols.some(c => c.name === 'identifier')) {
       this.db.exec('ALTER TABLE appointments ADD COLUMN identifier TEXT');
     }
+
+    // Ensure identifier index exists (covers both fresh and migrated databases)
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier)');
   }
 
   async close(): Promise<void> {
@@ -525,6 +529,11 @@ export class SqliteStore implements FhirStore {
     if (query.patient) {
       sql += ' AND participant LIKE ?';
       params.push(`%${query.patient}%`);
+    }
+
+    if (query.identifier) {
+      sql += ' AND identifier LIKE ?';
+      params.push(`%${query.identifier}%`);
     }
 
     sql += ' ORDER BY start ASC';

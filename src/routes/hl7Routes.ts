@@ -18,16 +18,15 @@ import { siuToFhirResources } from '../hl7/converter';
 
 /**
  * Find an existing appointment by its placer appointment ID.
+ * Uses an indexed query on the identifier column instead of a full table scan.
  * Returns the first match or null if no appointment carries that identifier.
  */
 async function findAppointmentByPlacerId(
   store: FhirStore,
   placerApptId: string,
 ): Promise<import('../types/fhir').Appointment | null> {
-  const appointments = await store.getAppointments({});
-  return appointments.find(apt =>
-    apt.identifier?.some(id => id.value === placerApptId)
-  ) ?? null;
+  const matches = await store.getAppointments({ identifier: placerApptId, _count: 1 });
+  return matches[0] ?? null;
 }
 
 /**
@@ -173,8 +172,6 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       const fhirResult = siuToFhirResources(siuMessage);
       
       // Process based on action type
-      let appointmentId: string | undefined;
-      
       try {
         // Ensure schedule exists
         const existingSchedules = await store.getSchedules({
@@ -197,15 +194,13 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         
         if (existingAppointment) {
           // Update the existing appointment rather than creating a duplicate
-          const updatedAppointment = await store.updateAppointment(
+          await store.updateAppointment(
             existingAppointment.id!,
             fhirResult.appointment
           );
-          appointmentId = updatedAppointment.id;
         } else {
           // No match found — create new appointment
-          const createdAppointment = await store.createAppointment(fhirResult.appointment);
-          appointmentId = createdAppointment.id;
+          await store.createAppointment(fhirResult.appointment);
           
           // Create slot if provided
           if (fhirResult.slot) {

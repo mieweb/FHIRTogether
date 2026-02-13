@@ -133,6 +133,7 @@ export interface FhirAppointmentQuery {
   status?: string;
   actor?: string;
   patient?: string;
+  identifier?: string;
   _count?: number;
 }
 
