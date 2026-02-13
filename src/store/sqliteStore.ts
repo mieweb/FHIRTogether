@@ -88,6 +88,7 @@ export class SqliteStore implements FhirStore {
         comment TEXT,
         patient_instruction TEXT,
         participant TEXT NOT NULL,
+        identifier TEXT,
         meta_last_updated TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
@@ -112,6 +113,12 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slot_holds_expires ON slot_holds(expires_at);
       CREATE INDEX IF NOT EXISTS idx_slot_holds_token ON slot_holds(hold_token);
     `);
+
+    // Migration: add identifier column if missing (existing databases)
+    const cols = this.db.pragma('table_info(appointments)') as { name: string }[];
+    if (!cols.some(c => c.name === 'identifier')) {
+      this.db.exec('ALTER TABLE appointments ADD COLUMN identifier TEXT');
+    }
   }
 
   async close(): Promise<void> {
@@ -461,8 +468,8 @@ export class SqliteStore implements FhirStore {
         id, status, cancelation_reason, service_category, service_type,
         specialty, appointment_type, reason_code, priority, description,
         slot_refs, start, end, created, comment, patient_instruction,
-        participant, meta_last_updated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        participant, identifier, meta_last_updated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -483,6 +490,7 @@ export class SqliteStore implements FhirStore {
       appointment.comment,
       appointment.patientInstruction,
       JSON.stringify(appointment.participant),
+      JSON.stringify(appointment.identifier || null),
       now
     );
 
@@ -545,7 +553,8 @@ export class SqliteStore implements FhirStore {
     const stmt = this.db.prepare(`
       UPDATE appointments SET
         status = ?, cancelation_reason = ?, description = ?, start = ?,
-        end = ?, comment = ?, participant = ?, meta_last_updated = ?
+        end = ?, comment = ?, participant = ?, identifier = ?,
+        meta_last_updated = ?
       WHERE id = ?
     `);
 
@@ -557,6 +566,7 @@ export class SqliteStore implements FhirStore {
       updated.end,
       updated.comment,
       JSON.stringify(updated.participant),
+      JSON.stringify(updated.identifier || null),
       now,
       id
     );
@@ -761,6 +771,7 @@ export class SqliteStore implements FhirStore {
       comment: row.comment,
       patientInstruction: row.patient_instruction,
       participant: this.parseJson(row.participant),
+      identifier: this.parseJson(row.identifier),
       meta: { lastUpdated: row.meta_last_updated },
     };
   }
