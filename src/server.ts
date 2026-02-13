@@ -73,8 +73,8 @@ async function buildServer() {
       },
       servers: [
         {
-          url: `http://localhost:${PORT}`,
-          description: 'Development server',
+          url: '/',
+          description: 'Current server',
         },
       ],
       tags: [
