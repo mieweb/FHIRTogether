@@ -9,12 +9,10 @@ export default defineConfig({
   },
   build: {
     lib: {
-      entry: {
-        standalone: resolve(__dirname, 'src/web-component.ts'),
-        'provider-view': resolve(__dirname, 'src/provider-view.tsx'),
-      },
+      entry: resolve(__dirname, 'src/provider-view.tsx'),
+      name: 'FhirProviderView',
       formats: ['es'],
-      fileName: (_format, entryName) => `${entryName}.js`,
+      fileName: () => 'provider-view.js',
     },
     rollupOptions: {
       // Bundle everything for standalone use
