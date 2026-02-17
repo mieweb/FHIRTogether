@@ -101,26 +101,20 @@ function setTime(date: Date, hours: number, minutes: number): Date {
 }
 
 /**
- * Format a Date as an ISO 8601 string with local timezone offset
- * This ensures appointment times represent the office's local time
- * and display correctly regardless of the viewer's timezone.
- * Example: 2026-01-07T08:00:00-05:00 (Eastern Standard Time)
+ * Format a Date as a naive ISO 8601 string without timezone suffix.
+ * e.g. "2026-02-17T08:00:00"
+ *
+ * Stored datetimes are treated as local wall-clock time.
+ * 8:00 AM means 8:00 AM regardless of server/client timezone.
  */
-function toLocalISOString(date: Date): string {
-  const offset = date.getTimezoneOffset();
-  const sign = offset <= 0 ? '+' : '-';
-  const absOffset = Math.abs(offset);
-  const hours = String(Math.floor(absOffset / 60)).padStart(2, '0');
-  const minutes = String(absOffset % 60).padStart(2, '0');
-  
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hour = String(date.getHours()).padStart(2, '0');
-  const minute = String(date.getMinutes()).padStart(2, '0');
-  const second = String(date.getSeconds()).padStart(2, '0');
-  
-  return `${year}-${month}-${day}T${hour}:${minute}:${second}${sign}${hours}:${minutes}`;
+function toNaiveISO(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
 }
 
 function isDayInSchedule(date: Date, daysPerWeek: number[]): boolean {
@@ -152,8 +146,8 @@ async function generateSchedulesAndSlots(store: SqliteStore, daysAhead: number =
         },
       ],
       planningHorizon: {
-        start: today.toISOString(),
-        end: endDate.toISOString(),
+        start: toNaiveISO(today),
+        end: toNaiveISO(endDate),
       },
       comment: `Schedule for ${provider.name}`,
     };
@@ -187,8 +181,8 @@ async function generateSchedulesAndSlots(store: SqliteStore, daysAhead: number =
             display: provider.name,
           },
           status: 'free',
-          start: toLocalISOString(currentTime),
-          end: toLocalISOString(slotEnd),
+          start: toNaiveISO(currentTime),
+          end: toNaiveISO(slotEnd),
           serviceType: [
             {
               text: provider.specialty,
@@ -323,8 +317,8 @@ async function main() {
     // Store the generation date for dynamic date shifting
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    store.setGenerationDate(today.toISOString());
-    console.log(`📅 Generation date set to: ${today.toISOString().split('T')[0]}`);
+    store.setGenerationDate(toNaiveISO(today));
+    console.log(`📅 Generation date set to: ${toNaiveISO(today).split('T')[0]}`);
     console.log('   (Dates will auto-shift to stay relative to today)\n');
 
     // Generate schedules and slots (6 months ahead)

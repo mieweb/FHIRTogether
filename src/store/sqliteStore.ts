@@ -12,6 +12,24 @@ import {
   FhirAppointmentQuery,
 } from '../types/fhir';
 
+/**
+ * Format a Date as a naive ISO 8601 string without timezone suffix.
+ * e.g. "2026-02-17T08:00:00"
+ *
+ * Stored datetimes are treated as local wall-clock time.
+ * This avoids timezone conversion issues — 8:00 AM means 8:00 AM
+ * regardless of the server or client timezone.
+ */
+function toNaiveISO(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
+}
+
 export class SqliteStore implements FhirStore {
   private db: Database.Database;
   private dataDir: string;
@@ -189,14 +207,14 @@ export class SqliteStore implements FhirStore {
     
     const date = new Date(isoDate);
     date.setDate(date.getDate() + offsetDays);
-    return date.toISOString();
+    return toNaiveISO(date);
   }
 
   // ==================== SCHEDULE OPERATIONS ====================
 
   async createSchedule(schedule: Schedule): Promise<Schedule> {
     const id = schedule.id || this.generateId();
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       INSERT INTO schedules (
@@ -259,7 +277,7 @@ export class SqliteStore implements FhirStore {
     if (!existing) throw new Error(`Schedule ${id} not found`);
 
     const updated = { ...existing, ...schedule, id };
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       UPDATE schedules SET
@@ -323,7 +341,7 @@ export class SqliteStore implements FhirStore {
 
   async createSlot(slot: Slot): Promise<Slot> {
     const id = slot.id || this.generateId();
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       INSERT INTO slots (
@@ -398,7 +416,7 @@ export class SqliteStore implements FhirStore {
     if (!existing) throw new Error(`Slot ${id} not found`);
 
     const updated = { ...existing, ...slot, id };
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       UPDATE slots SET
@@ -465,7 +483,7 @@ export class SqliteStore implements FhirStore {
 
   async createAppointment(appointment: Appointment): Promise<Appointment> {
     const id = appointment.id || this.generateId();
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       INSERT INTO appointments (
@@ -521,9 +539,9 @@ export class SqliteStore implements FhirStore {
     if (query.date) {
       sql += ' AND start >= ? AND start < ?';
       const startDate = query.date;
-      const endDate = new Date(query.date);
+      const endDate = new Date(query.date + 'T00:00:00');
       endDate.setDate(endDate.getDate() + 1);
-      params.push(startDate, endDate.toISOString());
+      params.push(startDate, endDate.toISOString().split('T')[0]);
     }
 
     if (query.patient) {
@@ -563,7 +581,7 @@ export class SqliteStore implements FhirStore {
     if (!existing) throw new Error(`Appointment ${id} not found`);
 
     const updated = { ...existing, ...appointment, id };
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       UPDATE appointments SET
@@ -663,7 +681,7 @@ export class SqliteStore implements FhirStore {
     if (existingHold) {
       // If the hold is from the same session, extend it
       if (existingHold.sessionId === sessionId) {
-        const newExpiry = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+        const newExpiry = toNaiveISO(new Date(Date.now() + durationMinutes * 60 * 1000));
         this.db.prepare('UPDATE slot_holds SET expires_at = ? WHERE id = ?').run(newExpiry, existingHold.id);
         return { ...existingHold, expiresAt: newExpiry };
       }
@@ -673,8 +691,8 @@ export class SqliteStore implements FhirStore {
     // Create new hold
     const id = this.generateId();
     const holdToken = `hold-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + durationMinutes * 60 * 1000).toISOString();
+    const now = toNaiveISO(new Date());
+    const expiresAt = toNaiveISO(new Date(Date.now() + durationMinutes * 60 * 1000));
 
     const stmt = this.db.prepare(`
       INSERT INTO slot_holds (id, slot_id, hold_token, session_id, expires_at, created_at)
@@ -698,7 +716,7 @@ export class SqliteStore implements FhirStore {
   }
 
   async getActiveHold(slotId: string): Promise<SlotHold | null> {
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
     const row = this.db.prepare(
       'SELECT * FROM slot_holds WHERE slot_id = ? AND expires_at > ?'
     ).get(slotId, now) as any;
@@ -715,7 +733,7 @@ export class SqliteStore implements FhirStore {
   }
 
   async cleanupExpiredHolds(): Promise<number> {
-    const now = new Date().toISOString();
+    const now = toNaiveISO(new Date());
     const result = this.db.prepare('DELETE FROM slot_holds WHERE expires_at <= ?').run(now);
     return result.changes;
   }

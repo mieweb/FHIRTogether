@@ -26,6 +26,20 @@ import {
 } from '../types/fhir';
 
 /**
+ * Format a Date as a naive ISO 8601 string without timezone suffix.
+ * Stored datetimes are treated as local wall-clock time.
+ */
+function toNaiveISO(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
+}
+
+/**
  * Mapping from SIU event types to FHIR Appointment status
  */
 const SIU_EVENT_TO_FHIR_STATUS: Record<SIUEventType, Appointment['status']> = {
@@ -190,8 +204,8 @@ function getAppointmentTimes(sch: SCHSegment): { start: string; end: string } {
   }
   
   return {
-    start: start.toISOString(),
-    end: end.toISOString(),
+    start: toNaiveISO(start),
+    end: toNaiveISO(end),
   };
 }
 
@@ -300,7 +314,7 @@ export function siuToFhirAppointment(siu: SIUMessage): Appointment {
     description: siu.sch.appointmentReason?.text || siu.sch.eventReason?.text,
     start: times.start,
     end: times.end,
-    created: new Date().toISOString(),
+    created: toNaiveISO(new Date()),
     comment: siu.sch.fillerStatusCode,
     participant: participants,
   };
