@@ -1,6 +1,7 @@
 services:
   app:
     build: .
+    init: true
     ports:
       - "4010:4010"
     volumes:
