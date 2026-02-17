@@ -39,6 +39,7 @@ export interface MLLPServerConfig {
     rejectUnauthorized?: boolean;
   };
   timeout?: number;    // Connection timeout in milliseconds
+  allowedIPs?: string[];  // IP allowlist; if empty, all IPs are allowed
 }
 
 /**
@@ -169,6 +170,19 @@ export class MLLPServer extends EventEmitter {
    */
   private handleConnection(socket: net.Socket): void {
     const remoteAddress = `${socket.remoteAddress}:${socket.remotePort}`;
+    const remoteIP = socket.remoteAddress || '';
+
+    // Enforce IP allowlist if configured
+    if (this.config.allowedIPs && this.config.allowedIPs.length > 0) {
+      // Normalize IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 → 127.0.0.1)
+      const normalizedIP = remoteIP.replace(/^::ffff:/, '');
+      if (!this.config.allowedIPs.includes(normalizedIP)) {
+        this.emit('rejected', { remoteAddress, reason: 'IP not in allowlist' });
+        socket.destroy();
+        return;
+      }
+    }
+
     this.connections.add(socket);
     
     this.emit('connection', { remoteAddress });

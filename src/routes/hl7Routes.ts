@@ -3,6 +3,7 @@
  * 
  * HTTP endpoints for receiving HL7v2 messages over HTTPS.
  * Supports raw HL7 message submission and returns ACK responses.
+ * Protected by the global Basic Auth hook registered in server.ts.
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
