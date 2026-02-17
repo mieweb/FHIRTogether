@@ -531,6 +531,12 @@ export class SqliteStore implements FhirStore {
       params.push(`%${query.patient}%`);
     }
 
+    if (query.actor) {
+      // Filter by any participant actor reference (provider, patient, etc.)
+      sql += ' AND participant LIKE ?';
+      params.push(`%${query.actor}%`);
+    }
+
     if (query.identifier) {
       sql += ' AND identifier LIKE ?';
       params.push(`%${query.identifier}%`);

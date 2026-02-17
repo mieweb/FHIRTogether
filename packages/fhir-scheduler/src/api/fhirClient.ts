@@ -13,10 +13,19 @@ export interface FhirClientConfig {
   headers?: Record<string, string>;
 }
 
+export interface AppointmentQuery {
+  date?: string;
+  status?: string;
+  actor?: string;
+  patient?: string;
+  _count?: number;
+}
+
 export interface FhirClient {
   getProviders(): Promise<Schedule[]>;
   getSlots(scheduleId: string, start: string, end: string): Promise<Slot[]>;
   getSlotCounts(scheduleId: string, dates: string[]): Promise<Record<string, number>>;
+  getAppointments(query: AppointmentQuery): Promise<Appointment[]>;
   holdSlot(slotId: string, durationMinutes: number, sessionId: string): Promise<SlotHold>;
   releaseHold(slotId: string, holdToken: string): Promise<void>;
   checkHold(slotId: string): Promise<SlotHold | null>;
@@ -108,6 +117,26 @@ export function createFhirClient(config: FhirClientConfig): FhirClient {
       }
       
       return counts;
+    },
+    
+    async getAppointments(query: AppointmentQuery): Promise<Appointment[]> {
+      const params = new URLSearchParams();
+      if (query.date) params.set('date', query.date);
+      if (query.status) params.set('status', query.status);
+      if (query.actor) params.set('actor', query.actor);
+      if (query.patient) params.set('patient', query.patient);
+      if (query._count) params.set('_count', String(query._count));
+      
+      const res = await fetch(`${baseUrl}/Appointment?${params}`, {
+        headers: defaultHeaders,
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Failed to fetch appointments: ${res.statusText}`);
+      }
+      
+      const bundle: Bundle<Appointment> = await res.json();
+      return bundle.entry?.map((e) => e.resource) || [];
     },
     
     async holdSlot(slotId: string, durationMinutes: number, sessionId: string): Promise<SlotHold> {

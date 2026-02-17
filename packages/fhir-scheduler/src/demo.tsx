@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SchedulerWidget } from './components/SchedulerWidget';
+import { AppointmentList } from './components/AppointmentList';
 import type { FormsRendererFormData, Appointment } from './types';
 import './styles/scheduler.css';
 
@@ -114,21 +115,60 @@ const fhirBaseUrl = window.location.hostname === 'localhost' || window.location.
   ? 'http://localhost:4010'
   : window.location.origin;
 
+type DemoTab = 'book' | 'appointments';
+
+function DemoApp() {
+  const [activeTab, setActiveTab] = useState<DemoTab>('book');
+
+  return (
+    <>
+      <nav className="fs-demo-tabs" role="tablist" aria-label="Demo views">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'book'}
+          className={`fs-demo-tab ${activeTab === 'book' ? 'fs-demo-tab-active' : ''}`}
+          onClick={() => setActiveTab('book')}
+        >
+          Book Appointment
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'appointments'}
+          className={`fs-demo-tab ${activeTab === 'appointments' ? 'fs-demo-tab-active' : ''}`}
+          onClick={() => setActiveTab('appointments')}
+        >
+          View Appointments
+        </button>
+      </nav>
+
+      {activeTab === 'book' && (
+        <SchedulerWidget
+          fhirBaseUrl={fhirBaseUrl}
+          holdDurationMinutes={5}
+          questionnaireFormData={intakeQuestionnaire}
+          onComplete={(appointment: Appointment) => {
+            console.log('Appointment booked:', appointment);
+            alert(`Appointment booked!\nID: ${appointment.id}\nStart: ${appointment.start}`);
+          }}
+          onError={(error: Error) => {
+            console.error('Scheduler error:', error);
+          }}
+        />
+      )}
+
+      {activeTab === 'appointments' && (
+        <AppointmentList fhirBaseUrl={fhirBaseUrl} />
+      )}
+    </>
+  );
+}
+
 const root = createRoot(document.getElementById('scheduler-root')!);
 
 root.render(
   <React.StrictMode>
-    <SchedulerWidget
-      fhirBaseUrl={fhirBaseUrl}
-      holdDurationMinutes={5}
-      questionnaireFormData={intakeQuestionnaire}
-      onComplete={(appointment: Appointment) => {
-        console.log('Appointment booked:', appointment);
-        alert(`Appointment booked!\nID: ${appointment.id}\nStart: ${appointment.start}`);
-      }}
-      onError={(error: Error) => {
-        console.error('Scheduler error:', error);
-      }}
-    />
+    <DemoApp />
   </React.StrictMode>
 );

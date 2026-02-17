@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Provider View - FHIR Scheduler</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      color: #1e40af;
+      margin-bottom: 0.5rem;
+    }
+    header p {
+      color: #666;
+    }
+    .demo-nav {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .demo-nav a {
+      color: #2563eb;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 0.25rem 0;
+      border-bottom: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .demo-nav a:hover {
+      border-bottom-color: #93c5fd;
+    }
+    .demo-nav a.active {
+      border-bottom-color: #2563eb;
+    }
+    #app {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗓️ FHIR Scheduler</h1>
+    <p>Provider appointment view</p>
+  </header>
+
+  <nav class="demo-nav" aria-label="Demo navigation">
+    <a href="/">Book Appointment</a>
+    <a href="/provider-view.html" class="active">Provider View</a>
+  </nav>
+
+  <div id="app"></div>
+
+  <script type="module" src="/src/provider-view.tsx"></script>
+</body>
+</html>

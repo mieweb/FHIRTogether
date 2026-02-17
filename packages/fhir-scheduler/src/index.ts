@@ -4,6 +4,7 @@ export { ProviderList, ConnectedProviderList } from './components/ProviderList';
 export { SlotCalendar, ConnectedSlotCalendar } from './components/SlotCalendar';
 export { BookingForm, ConnectedBookingForm } from './components/BookingForm';
 export { Confirmation, ConnectedConfirmation } from './components/Confirmation';
+export { AppointmentList } from './components/AppointmentList';
 
 // Store exports
 export { useSchedulerStore } from './store/schedulerStore';
