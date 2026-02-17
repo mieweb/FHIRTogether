@@ -87,8 +87,8 @@ export function createFhirClient(config: FhirClientConfig): FhirClient {
       const params = new URLSearchParams({
         schedule: `Schedule/${scheduleId}`,
         status: 'free',
-        start: `${startDate}T00:00:00Z`,
-        end: `${endDate}T23:59:59Z`,
+        start: `${startDate}T00:00:00`,
+        end: `${endDate}T23:59:59`,
       });
       
       const res = await fetch(`${baseUrl}/Slot?${params}`, {
