@@ -11,6 +11,7 @@ import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
 import { hl7Routes } from './routes/hl7Routes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
+import { registerBasicAuth } from './auth/basicAuth';
 
 // Load environment variables
 config();
@@ -24,6 +25,10 @@ const HL7_TLS_ENABLED = process.env.HL7_TLS_ENABLED === 'true';
 const HL7_TLS_KEY = process.env.HL7_TLS_KEY;
 const HL7_TLS_CERT = process.env.HL7_TLS_CERT;
 const HL7_TLS_CA = process.env.HL7_TLS_CA;
+const AUTH_ENABLED = !!(process.env.AUTH_USERNAME && process.env.AUTH_PASSWORD);
+const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
+  ? process.env.HL7_MLLP_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
+  : [];
 
 async function buildServer() {
   const fastify = Fastify({
@@ -43,6 +48,12 @@ async function buildServer() {
   await fastify.register(cors, {
     origin: true,
   });
+
+  // Register global Basic Auth (skips /health, /docs/*, /demo, /scheduler/*)
+  const authActive = registerBasicAuth(fastify);
+  if (!authActive) {
+    fastify.log.warn('No AUTH_USERNAME/AUTH_PASSWORD set - all API endpoints are OPEN');
+  }
 
   // Add content type parser for text/plain (for raw HL7 messages)
   fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
@@ -122,6 +133,10 @@ async function buildServer() {
     await scheduleRoutes(instance, store);
     await slotRoutes(instance, store);
     await appointmentRoutes(instance, store);
+  });
+
+  // Register HL7 routes
+  await fastify.register(async (instance) => {
     await hl7Routes(instance, store);
   });
 
@@ -190,6 +205,7 @@ async function start() {
           cert: HL7_TLS_CERT,
           ca: HL7_TLS_CA,
         } : undefined,
+        allowedIPs: HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS : undefined,
       });
       
       mllpServer.on('listening', (info) => {
@@ -198,6 +214,10 @@ async function start() {
       
       mllpServer.on('error', (err) => {
         console.error('MLLP Server error:', err);
+      });
+
+      mllpServer.on('rejected', (info) => {
+        fastify.log.warn(info, 'MLLP connection rejected');
       });
       
       mllpServer.on('message', (event) => {
@@ -218,8 +238,10 @@ async function start() {
     console.log(`🗓️ Scheduler Demo: http://localhost:${PORT}/demo`);
     console.log(`💾 Store Backend: ${STORE_BACKEND}`);
     console.log(`🧪 Test Endpoints: ${process.env.ENABLE_TEST_ENDPOINTS === 'true' ? 'Enabled' : 'Disabled'}`);
+    console.log(`🔐 API Auth: ${AUTH_ENABLED ? 'Basic Auth enabled' : '⚠️  OPEN (set AUTH_USERNAME & AUTH_PASSWORD)'}`);
     if (HL7_SOCKET_ENABLED) {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
+      console.log(`🔐 HL7 Socket IPs: ${HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS.join(', ') : '⚠️  ALL (set HL7_MLLP_ALLOWED_IPS)'}`);
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
     
