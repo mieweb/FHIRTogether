@@ -7,6 +7,8 @@ services:
     volumes:
       # Persist the database outside the container
       - ./data:/app/data
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - SQLITE_DB_PATH=/app/data/fhirtogether.db
