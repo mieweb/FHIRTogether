@@ -181,7 +181,7 @@ export class SqliteStore implements FhirStore {
   /**
    * Calculate the number of days to shift dates from generation to today
    */
-  private getDateOffsetDays(): number {
+  getDateOffsetDays(): number {
     const generationDate = this.getGenerationDate();
     if (!generationDate) return 0;
     
@@ -194,20 +194,6 @@ export class SqliteStore implements FhirStore {
     
     const diffMs = today.getTime() - genDate.getTime();
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  }
-
-  /**
-   * Shift an ISO date string by the date offset
-   */
-  private shiftDate(isoDate: string | undefined): string | undefined {
-    if (!isoDate) return undefined;
-    
-    const offsetDays = this.getDateOffsetDays();
-    if (offsetDays === 0) return isoDate;
-    
-    const date = new Date(isoDate);
-    date.setDate(date.getDate() + offsetDays);
-    return toNaiveISO(date);
   }
 
   // ==================== SCHEDULE OPERATIONS ====================
@@ -758,8 +744,8 @@ export class SqliteStore implements FhirStore {
       specialty: this.parseJson(row.specialty),
       actor: this.parseJson(row.actor),
       planningHorizon: row.planning_horizon_start ? {
-        start: this.shiftDate(row.planning_horizon_start) || row.planning_horizon_start,
-        end: this.shiftDate(row.planning_horizon_end) || row.planning_horizon_end,
+        start: row.planning_horizon_start,
+        end: row.planning_horizon_end,
       } : undefined,
       comment: row.comment,
       meta: { lastUpdated: row.meta_last_updated },
@@ -772,8 +758,8 @@ export class SqliteStore implements FhirStore {
       id: row.id,
       schedule: { reference: `Schedule/${row.schedule_id}` },
       status: row.status,
-      start: this.shiftDate(row.start) || row.start,
-      end: this.shiftDate(row.end) || row.end,
+      start: row.start,
+      end: row.end,
       serviceCategory: this.parseJson(row.service_category),
       serviceType: this.parseJson(row.service_type),
       specialty: this.parseJson(row.specialty),
@@ -798,8 +784,8 @@ export class SqliteStore implements FhirStore {
       priority: row.priority,
       description: row.description,
       slot: this.parseJson(row.slot_refs),
-      start: this.shiftDate(row.start),
-      end: this.shiftDate(row.end),
+      start: row.start,
+      end: row.end,
       created: row.created,
       comment: row.comment,
       patientInstruction: row.patient_instruction,
