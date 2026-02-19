@@ -48,7 +48,10 @@ function getDateOptions(days: number = 180): string[] {
   for (let i = 0; i < days; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
-    dates.push(date.toISOString().split('T')[0]);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    dates.push(`${y}-${m}-${d}`);
   }
   
   return dates;

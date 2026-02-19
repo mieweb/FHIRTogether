@@ -58,10 +58,14 @@ function formatDuration(start: string, end: string): string {
 }
 
 /**
- * Get the ISO date string (YYYY-MM-DD) for a date
+ * Get the local date string (YYYY-MM-DD) for a date.
+ * Uses local time components to stay consistent with naive (no-timezone) datetimes.
  */
 function toDateString(date: Date): string {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 /**
