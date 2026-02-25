@@ -295,7 +295,7 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
   },
   
   submitBooking: async () => {
-    const { _client, selectedSlot, patientInfo, holdToken, questionnaireResponse, _holdTimer } = get();
+    const { _client, selectedSlot, selectedProvider, visitType, patientInfo, holdToken, questionnaireResponse, _holdTimer } = get();
     
     if (!_client) {
       throw new Error('Scheduler not initialized');
@@ -317,7 +317,9 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
         selectedSlot,
         patientInfo,
         holdToken,
-        questionnaireResponse || undefined
+        questionnaireResponse || undefined,
+        selectedProvider || undefined,
+        visitType || undefined
       );
       
       // Clear hold timer on success

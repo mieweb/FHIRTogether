@@ -1348,6 +1348,24 @@
   white-space: nowrap;
 }
 
+.fs-apptlist-type {
+  font-size: 0.8125rem;
+  color: #374151;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fs-apptlist-location {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin: 0.125rem 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fs-apptlist-reason,
 .fs-apptlist-desc {
   font-size: 0.8125rem;

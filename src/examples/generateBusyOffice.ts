@@ -15,6 +15,7 @@ interface Provider {
   id: string;
   name: string;
   specialty: string;
+  location: string;
   avgAppointmentLength: number; // minutes
   startHour: number;
   endHour: number;
@@ -26,6 +27,7 @@ const PROVIDERS: Provider[] = [
     id: 'practitioner-smith',
     name: 'Dr. Sarah Smith',
     specialty: 'Family Medicine',
+    location: 'Main Clinic - Room 101',
     avgAppointmentLength: 20,
     startHour: 8,
     endHour: 17,
@@ -35,6 +37,7 @@ const PROVIDERS: Provider[] = [
     id: 'practitioner-johnson',
     name: 'Dr. Michael Johnson',
     specialty: 'Internal Medicine',
+    location: 'East Wing - Room 204',
     avgAppointmentLength: 25,
     startHour: 9,
     endHour: 18,
@@ -44,6 +47,7 @@ const PROVIDERS: Provider[] = [
     id: 'practitioner-williams',
     name: 'Dr. Emily Williams',
     specialty: 'Pediatrics',
+    location: 'Pediatric Center - Room 305',
     avgAppointmentLength: 15,
     startHour: 8,
     endHour: 16,
@@ -256,8 +260,15 @@ async function generateAppointments(store: SqliteStore, scheduleIds: { [key: str
             },
             status: 'accepted',
           },
+          {
+            actor: {
+              reference: `Location/${provider.id.replace('practitioner-', 'location-')}`,
+              display: provider.location,
+            },
+            status: 'accepted',
+          },
         ],
-        comment: `Appointment with ${provider.name}`,
+
       };
 
       await store.createAppointment(appointment);
