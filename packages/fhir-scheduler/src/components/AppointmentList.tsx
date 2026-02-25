@@ -102,6 +102,16 @@ function getPatientDisplay(appointment: Appointment): string {
 }
 
 /**
+ * Get location display name from appointment participants
+ */
+function getLocationDisplay(appointment: Appointment): string | null {
+  const location = appointment.participant?.find(
+    (p) => p.actor?.reference?.includes('Location/')
+  );
+  return location?.actor?.display || null;
+}
+
+/**
  * Get provider display name from schedule
  */
 function getProviderName(schedule: Schedule): string {
@@ -448,11 +458,17 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
                           {appt.status}
                         </span>
                       </div>
+                      {appt.description && (
+                        <p className="fs-apptlist-type">{appt.description}</p>
+                      )}
+                      {appt.appointmentType?.text && (
+                        <p className="fs-apptlist-type">{appt.appointmentType.text}</p>
+                      )}
+                      {getLocationDisplay(appt) && (
+                        <p className="fs-apptlist-location">{getLocationDisplay(appt)}</p>
+                      )}
                       {appt.comment && (
                         <p className="fs-apptlist-reason">{appt.comment}</p>
-                      )}
-                      {appt.description && (
-                        <p className="fs-apptlist-desc">{appt.description}</p>
                       )}
                     </div>
                   </article>

@@ -33,7 +33,9 @@ export interface FhirClient {
     slot: Slot,
     patientInfo: PatientInfo,
     holdToken: string,
-    questionnaireResponse?: QuestionnaireResponse
+    questionnaireResponse?: QuestionnaireResponse,
+    provider?: Schedule,
+    visitType?: string
   ): Promise<Appointment>;
 }
 
@@ -191,23 +193,47 @@ export function createFhirClient(config: FhirClientConfig): FhirClient {
       slot: Slot,
       patientInfo: PatientInfo,
       holdToken: string,
-      questionnaireResponse?: QuestionnaireResponse
+      questionnaireResponse?: QuestionnaireResponse,
+      provider?: Schedule,
+      visitType?: string
     ): Promise<Appointment> {
+      const participants: Appointment['participant'] = [];
+
+      // Add provider/practitioner as participant if available
+      if (provider?.actor?.[0]) {
+        participants.push({
+          actor: {
+            reference: provider.actor[0].reference,
+            display: provider.actor[0].display,
+          },
+          status: 'accepted',
+        });
+      }
+
+      // Add patient as participant
+      participants.push({
+        actor: {
+          reference: `Patient/${patientInfo.name.toLowerCase().replace(/\s+/g, '-')}`,
+          display: patientInfo.name,
+        },
+        status: 'accepted',
+      });
+
+      // Build a human-readable description from visit type
+      const description = visitType === 'new-patient'
+        ? 'New Patient Visit'
+        : visitType === 'follow-up'
+          ? 'Follow Up Visit'
+          : undefined;
+
       const appointment: Appointment & { _holdToken?: string } = {
         resourceType: 'Appointment',
         status: 'booked',
         slot: [{ reference: `Slot/${slot.id}` }],
         start: slot.start,
         end: slot.end,
-        participant: [
-          {
-            actor: {
-              reference: `Patient/${patientInfo.name.toLowerCase().replace(/\s+/g, '-')}`,
-              display: patientInfo.name,
-            },
-            status: 'accepted',
-          },
-        ],
+        description,
+        participant: participants,
         comment: patientInfo.reason,
         _holdToken: holdToken,
         contained: questionnaireResponse ? [questionnaireResponse] : undefined,
