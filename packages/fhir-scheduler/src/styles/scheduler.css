@@ -847,10 +847,6 @@
   pointer-events: none;
 }
 
-.fs-questionnaire-renderer {
-  /* Override forms-renderer styles to match scheduler theme */
-}
-
 /* Override forms-renderer default container styles */
 .fs-questionnaire-wrapper .qb-render-root {
   padding: 0;

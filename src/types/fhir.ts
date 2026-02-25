@@ -150,6 +150,34 @@ export interface SlotHold {
 }
 
 /**
+ * HL7 Message Log Entry
+ *
+ * Persisted audit record of every inbound HL7 message.
+ * Old entries are purged daily based on HL7_MESSAGE_LOG_RETENTION_DAYS.
+ */
+export interface HL7MessageLogEntry {
+  id: string;
+  receivedAt: string;
+  source: 'http' | 'mllp';
+  remoteAddress?: string;
+  messageType?: string;
+  triggerEvent?: string;
+  controlId?: string;
+  rawMessage: string;
+  ackResponse?: string;
+  ackCode?: string;        // AA, AE, AR
+  processingMs?: number;
+}
+
+export interface HL7MessageLogQuery {
+  source?: 'http' | 'mllp';
+  messageType?: string;
+  ackCode?: string;
+  since?: string;          // ISO datetime lower-bound
+  _count?: number;
+}
+
+/**
  * Store Interface
  */
 export interface FhirStore {
@@ -183,6 +211,11 @@ export interface FhirStore {
   getActiveHold(slotId: string): Promise<SlotHold | null>;
   getHoldByToken(holdToken: string): Promise<SlotHold | null>;
   cleanupExpiredHolds(): Promise<number>;
+
+  // HL7 message log operations
+  logHL7Message(entry: Omit<HL7MessageLogEntry, 'id'>): Promise<HL7MessageLogEntry>;
+  getHL7MessageLog(query?: HL7MessageLogQuery): Promise<HL7MessageLogEntry[]>;
+  cleanupHL7MessageLog(retentionDays: number): Promise<number>;
 
   // Utility
   initialize(): Promise<void>;

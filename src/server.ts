@@ -29,6 +29,7 @@ const AUTH_ENABLED = !!(process.env.AUTH_USERNAME && process.env.AUTH_PASSWORD);
 const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   ? process.env.HL7_MLLP_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
   : [];
+const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
 
 async function buildServer() {
   const fastify = Fastify({
@@ -192,6 +193,21 @@ async function start() {
   try {
     const { fastify, store } = await buildServer();
     await fastify.listen({ port: PORT, host: HOST });
+
+    // ── HL7 message log cleanup (runs once at startup + every 24 h) ──
+    const runHL7LogCleanup = async () => {
+      try {
+        const deleted = await store.cleanupHL7MessageLog(HL7_MESSAGE_LOG_RETENTION_DAYS);
+        if (deleted > 0) {
+          fastify.log.info({ deleted, retentionDays: HL7_MESSAGE_LOG_RETENTION_DAYS }, 'HL7 message log cleanup complete');
+        }
+      } catch (err) {
+        fastify.log.error({ err }, 'HL7 message log cleanup failed');
+      }
+    };
+    await runHL7LogCleanup();
+    const hl7LogCleanupInterval = setInterval(runHL7LogCleanup, 24 * 60 * 60 * 1000);
+    hl7LogCleanupInterval.unref(); // don't keep the process alive just for this
     
     // Start MLLP socket server if enabled
     let mllpServer: MLLPServer | null = null;

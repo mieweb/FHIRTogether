@@ -237,12 +237,21 @@ export class MLLPServer extends EventEmitter {
     socket: net.Socket,
     remoteAddress: string
   ): Promise<string> {
+    const startTime = Date.now();
+    let rawMessage = '';
+    let messageType: string | undefined;
+    let triggerEvent: string | undefined;
+    let controlId: string | undefined;
+
     try {
       // Unwrap MLLP framing
-      const rawMessage = unwrapMLLP(mllpMessage);
+      rawMessage = unwrapMLLP(mllpMessage);
       
       // Parse the message
       const parsed = parseRawMessage(rawMessage);
+      messageType = parsed.messageType;
+      triggerEvent = parsed.triggerEvent;
+      controlId = parsed.controlId;
       
       // Emit message event
       this.emit('message', {
@@ -280,7 +289,11 @@ export class MLLPServer extends EventEmitter {
 
       // Process based on message type
       if (parsed.messageType === 'SIU') {
-        return await this.processSIUMessage(rawMessage);
+        const ackMessage = await this.processSIUMessage(rawMessage);
+        // Determine ACK code from the response (MSA segment, field 1)
+        const ackCodeMatch = ackMessage.match(/MSA\|([A-Z]{2})/);
+        this.logMessage(rawMessage, messageType, triggerEvent, controlId, remoteAddress, ackMessage, ackCodeMatch?.[1], startTime);
+        return ackMessage;
       }
 
       // Unsupported message type
@@ -305,7 +318,9 @@ export class MLLPServer extends EventEmitter {
         `Unsupported message type: ${parsed.messageType}`,
         { code: '200', text: 'Unsupported message type', severity: 'E' }
       );
-      return buildACKMessage(ack);
+      const unsupportedAck = buildACKMessage(ack);
+      this.logMessage(rawMessage || mllpMessage, messageType, triggerEvent, controlId, remoteAddress, unsupportedAck, 'AE', startTime);
+      return unsupportedAck;
 
     } catch (error) {
       this.emit('processingError', { error, remoteAddress });
@@ -328,8 +343,38 @@ export class MLLPServer extends EventEmitter {
         `Error processing message: ${error instanceof Error ? error.message : 'Unknown error'}`,
         { code: '100', text: 'Segment sequence error', severity: 'E' }
       );
-      return buildACKMessage(ack);
+      const errorAck = buildACKMessage(ack);
+      this.logMessage(rawMessage || mllpMessage, messageType, triggerEvent, controlId, remoteAddress, errorAck, 'AR', startTime);
+      return errorAck;
     }
+  }
+
+  /**
+   * Persist an HL7 message log entry (fire-and-forget).
+   */
+  private logMessage(
+    rawMessage: string,
+    messageType: string | undefined,
+    triggerEvent: string | undefined,
+    controlId: string | undefined,
+    remoteAddress: string,
+    ackResponse: string,
+    ackCode: string | undefined,
+    startTime: number,
+  ): void {
+    if (!this.store) return;
+    this.store.logHL7Message({
+      receivedAt: new Date(startTime).toISOString(),
+      source: 'mllp',
+      remoteAddress,
+      messageType,
+      triggerEvent,
+      controlId,
+      rawMessage,
+      ackResponse,
+      ackCode,
+      processingMs: Date.now() - startTime,
+    }).catch(() => { /* best effort */ });
   }
 
   /**
