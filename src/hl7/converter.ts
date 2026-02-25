@@ -126,9 +126,12 @@ function ailToLocationReference(ail: AILSegment): Reference | undefined {
   if (!ail.locationResourceId) return undefined;
   
   const locationId = ail.locationResourceId.pointOfCare || 
+    ail.locationResourceId.room ||
     ail.locationResourceId.facility || 
     'unknown';
-  const display = ail.locationTypeCode?.text || ail.locationResourceId.facility;
+  const display = ail.locationResourceId.locationDescription ||
+    ail.locationTypeCode?.text || 
+    ail.locationResourceId.facility;
   
   return {
     reference: `Location/${locationId}`,

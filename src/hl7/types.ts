@@ -272,11 +272,16 @@ export interface AILSegment {
   segmentType: 'AIL';
   setId: string;                       // AIL-1
   segmentActionCode: ResourceAction;   // AIL-2
-  locationResourceId?: {               // AIL-3
-    pointOfCare?: string;
-    room?: string;
-    bed?: string;
-    facility?: string;
+  locationResourceId?: {               // AIL-3 (PL data type)
+    pointOfCare?: string;              // PL.1
+    room?: string;                     // PL.2
+    bed?: string;                      // PL.3
+    facility?: string;                 // PL.4
+    locationStatus?: string;           // PL.5
+    personLocationType?: string;       // PL.6
+    building?: string;                 // PL.7
+    floor?: string;                    // PL.8
+    locationDescription?: string;      // PL.9
   };
   locationTypeCode?: {                 // AIL-4
     code?: string;

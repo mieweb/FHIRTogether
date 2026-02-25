@@ -359,6 +359,11 @@ export function parseAIL(segment: string): AILSegment {
       room: locationParts[1] || undefined,
       bed: locationParts[2] || undefined,
       facility: locationParts[3] || undefined,
+      locationStatus: locationParts[4] || undefined,
+      personLocationType: locationParts[5] || undefined,
+      building: locationParts[6] || undefined,
+      floor: locationParts[7] || undefined,
+      locationDescription: locationParts[8] || undefined,
     },
     locationTypeCode: {
       code: locationTypeParts[0] || undefined,
@@ -758,7 +763,12 @@ export function buildAIL(ail: AILSegment): string {
         ail.locationResourceId.room || '',
         ail.locationResourceId.bed || '',
         ail.locationResourceId.facility || '',
-      ].join(HL7_COMPONENT_SEPARATOR)
+        ail.locationResourceId.locationStatus || '',
+        ail.locationResourceId.personLocationType || '',
+        ail.locationResourceId.building || '',
+        ail.locationResourceId.floor || '',
+        ail.locationResourceId.locationDescription || '',
+      ].join(HL7_COMPONENT_SEPARATOR).replace(/\^+$/, '')
     : '';
   
   const locationType = ail.locationTypeCode
