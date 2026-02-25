@@ -315,7 +315,6 @@ export function siuToFhirAppointment(siu: SIUMessage): Appointment {
     start: times.start,
     end: times.end,
     created: toNaiveISO(new Date()),
-    comment: siu.sch.fillerStatusCode,
     participant: participants,
   };
   
