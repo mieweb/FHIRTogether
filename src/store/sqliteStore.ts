@@ -7,6 +7,8 @@ import {
   Slot,
   Appointment,
   SlotHold,
+  HL7MessageLogEntry,
+  HL7MessageLogQuery,
   FhirSlotQuery,
   FhirScheduleQuery,
   FhirAppointmentQuery,
@@ -131,6 +133,24 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slot_holds_slot ON slot_holds(slot_id);
       CREATE INDEX IF NOT EXISTS idx_slot_holds_expires ON slot_holds(expires_at);
       CREATE INDEX IF NOT EXISTS idx_slot_holds_token ON slot_holds(hold_token);
+
+      CREATE TABLE IF NOT EXISTS hl7_message_log (
+        id TEXT PRIMARY KEY,
+        received_at TEXT NOT NULL,
+        source TEXT NOT NULL,
+        remote_address TEXT,
+        message_type TEXT,
+        trigger_event TEXT,
+        control_id TEXT,
+        raw_message TEXT NOT NULL,
+        ack_response TEXT,
+        ack_code TEXT,
+        processing_ms INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_hl7_log_received ON hl7_message_log(received_at);
+      CREATE INDEX IF NOT EXISTS idx_hl7_log_source ON hl7_message_log(source);
+      CREATE INDEX IF NOT EXISTS idx_hl7_log_type ON hl7_message_log(message_type);
     `);
 
     // Migration: add identifier column if missing (existing databases)
@@ -724,6 +744,68 @@ export class SqliteStore implements FhirStore {
     return result.changes;
   }
 
+  // ==================== HL7 MESSAGE LOG OPERATIONS ====================
+
+  async logHL7Message(entry: Omit<HL7MessageLogEntry, 'id'>): Promise<HL7MessageLogEntry> {
+    const id = this.generateId();
+    this.db.prepare(`
+      INSERT INTO hl7_message_log (id, received_at, source, remote_address, message_type, trigger_event, control_id, raw_message, ack_response, ack_code, processing_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      entry.receivedAt,
+      entry.source,
+      entry.remoteAddress || null,
+      entry.messageType || null,
+      entry.triggerEvent || null,
+      entry.controlId || null,
+      entry.rawMessage,
+      entry.ackResponse || null,
+      entry.ackCode || null,
+      entry.processingMs ?? null,
+    );
+    return { id, ...entry };
+  }
+
+  async getHL7MessageLog(query?: HL7MessageLogQuery): Promise<HL7MessageLogEntry[]> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+
+    if (query?.source) {
+      conditions.push('source = ?');
+      params.push(query.source);
+    }
+    if (query?.messageType) {
+      conditions.push('message_type = ?');
+      params.push(query.messageType);
+    }
+    if (query?.ackCode) {
+      conditions.push('ack_code = ?');
+      params.push(query.ackCode);
+    }
+    if (query?.since) {
+      conditions.push('received_at >= ?');
+      params.push(query.since);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const limit = query?._count ?? 100;
+
+    const rows = this.db.prepare(
+      `SELECT * FROM hl7_message_log ${where} ORDER BY received_at DESC LIMIT ?`
+    ).all(...params, limit) as any[];
+
+    return rows.map(row => this.rowToHL7LogEntry(row));
+  }
+
+  async cleanupHL7MessageLog(retentionDays: number): Promise<number> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+    const cutoffStr = toNaiveISO(cutoff);
+    const result = this.db.prepare('DELETE FROM hl7_message_log WHERE received_at < ?').run(cutoffStr);
+    return result.changes;
+  }
+
   // ==================== HELPER METHODS ====================
 
   private generateId(): string {
@@ -803,6 +885,22 @@ export class SqliteStore implements FhirStore {
       sessionId: row.session_id,
       expiresAt: row.expires_at,
       createdAt: row.created_at,
+    };
+  }
+
+  private rowToHL7LogEntry(row: any): HL7MessageLogEntry {
+    return {
+      id: row.id,
+      receivedAt: row.received_at,
+      source: row.source,
+      remoteAddress: row.remote_address || undefined,
+      messageType: row.message_type || undefined,
+      triggerEvent: row.trigger_event || undefined,
+      controlId: row.control_id || undefined,
+      rawMessage: row.raw_message,
+      ackResponse: row.ack_response || undefined,
+      ackCode: row.ack_code || undefined,
+      processingMs: row.processing_ms ?? undefined,
     };
   }
 

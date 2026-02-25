@@ -7,7 +7,7 @@
  */
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { FhirStore } from '../types/fhir';
+import { FhirStore, HL7MessageLogQuery } from '../types/fhir';
 import {
   parseSIUMessage,
   parseRawMessage,
@@ -97,12 +97,34 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       },
     },
   }, async (request: FastifyRequest<{ Body: HL7MessageRequest | string }>, reply: FastifyReply) => {
+    const startTime = Date.now();
     // Determine if request was JSON to return appropriate response format
     const contentType = request.headers['content-type'] || '';
     const isJsonRequest = contentType.includes('application/json');
+    const remoteAddress = request.ip;
+
+    // Mutable state captured during processing for the log entry
+    let capturedRaw = '';
+    let capturedMessageType: string | undefined;
+    let capturedTriggerEvent: string | undefined;
+    let capturedControlId: string | undefined;
     
-    // Helper to send ACK response in the appropriate format
-    const sendAck = (ackMessage: string, status: number = 200) => {
+    // Helper to send ACK response and persist message log
+    const sendAck = async (ackMessage: string, ackCode: string, status: number = 200) => {
+      // Persist to HL7 message log (fire-and-forget so it never blocks the ACK)
+      store.logHL7Message({
+        receivedAt: new Date(startTime).toISOString(),
+        source: 'http',
+        remoteAddress,
+        messageType: capturedMessageType,
+        triggerEvent: capturedTriggerEvent,
+        controlId: capturedControlId,
+        rawMessage: capturedRaw,
+        ackResponse: ackMessage,
+        ackCode,
+        processingMs: Date.now() - startTime,
+      }).catch(err => fastify.log.error({ err }, 'Failed to persist HL7 message log'));
+
       if (isJsonRequest) {
         return reply
           .status(status)
@@ -127,6 +149,8 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         wrapResponse = request.body.wrapMLLP || false;
       }
       
+      capturedRaw = rawMessage;
+      
       // Normalize literal \n and \r sequences to actual control characters
       // This handles messages sent as plain text with escaped newlines
       rawMessage = rawMessage
@@ -136,6 +160,9 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       
       // Parse the raw message first to validate and get control ID
       const parsed = parseRawMessage(rawMessage);
+      capturedMessageType = parsed.messageType;
+      capturedTriggerEvent = parsed.triggerEvent;
+      capturedControlId = parsed.controlId;
       
       // Verify it's a SIU message
       if (parsed.messageType !== 'SIU') {
@@ -163,7 +190,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           ackMessage = wrapMLLP(ackMessage);
         }
         
-        return sendAck(ackMessage, 400);
+        return sendAck(ackMessage, 'AE', 400);
       }
       
       // Parse the full SIU message
@@ -217,7 +244,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           ackMessage = wrapMLLP(ackMessage);
         }
         
-        return sendAck(ackMessage, 200);
+        return sendAck(ackMessage, 'AA', 200);
         
       } catch (storeError) {
         // Database/store error
@@ -234,7 +261,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         }
         
         // AE - Application Error (processing failure, can retry)
-        return sendAck(ackMessage, 500);
+        return sendAck(ackMessage, 'AE', 500);
       }
       
     } catch (parseError) {
@@ -261,7 +288,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       );
       
       // AR - Application Rejected (message format error, don't retry)
-      return sendAck(buildACKMessage(ack), 400);
+      return sendAck(buildACKMessage(ack), 'AR', 400);
     }
   });
 
@@ -391,5 +418,42 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         socket: `Port ${process.env.HL7_SOCKET_PORT || '2575'}`,
       },
     };
+  });
+
+  /**
+   * GET /hl7/log - Retrieve recent HL7 message log entries
+   *
+   * Query params: source, messageType, ackCode, since, _count
+   */
+  fastify.get<{
+    Querystring: HL7MessageLogQuery;
+  }>('/hl7/log', {
+    schema: {
+      description: 'Retrieve recent HL7 message log entries. Supports filtering by source, messageType, ackCode, since (ISO datetime), and _count (default 100).',
+      tags: ['HL7'],
+      querystring: {
+        type: 'object',
+        properties: {
+          source: { type: 'string', enum: ['http', 'mllp'] },
+          messageType: { type: 'string' },
+          ackCode: { type: 'string' },
+          since: { type: 'string', description: 'ISO datetime lower-bound' },
+          _count: { type: 'integer', minimum: 1, maximum: 1000 },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            total: { type: 'integer' },
+            entries: { type: 'array', items: { type: 'object', additionalProperties: true } },
+          },
+        },
+      },
+    },
+  }, async (request) => {
+    const entries = await store.getHL7MessageLog(request.query);
+    return { total: entries.length, entries };
   });
 }
