@@ -233,7 +233,7 @@ export function parseSCH(segment: string): SCHSegment {
     } : undefined,
     appointmentType: fields[8] ? {
       identifier: fields[8].split(HL7_COMPONENT_SEPARATOR)[0] || undefined,
-      text: fields[8],
+      text: fields[8].split(HL7_COMPONENT_SEPARATOR)[1] || fields[8].split(HL7_COMPONENT_SEPARATOR)[0] || undefined,
     } : undefined,
     appointmentDuration: fields[9] ? parseInt(fields[9], 10) : undefined,
     appointmentDurationUnits: fields[10] || undefined,
