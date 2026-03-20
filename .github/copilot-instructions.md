@@ -45,6 +45,35 @@ src/
 - Resource types: Schedule, Slot, Appointment
 - Use proper FHIR references (e.g., `Schedule/123`, `Slot/456`)
 
+### Scheduling Model (HL7-Aligned)
+
+- **Resource:** Entity whose time is scheduled (e.g., provider, room, device).
+  → FHIR: `Schedule.actor` / `Slot.schedule.actor`
+  → HL7 v2: `SCH-1/2` (placer/filler), `AIG/AIS/AIL` (resource groups)
+
+- **Participant:** Any entity involved (e.g., patient, staff, external). Not special-cased.
+  → FHIR: `Appointment.participant`
+  → HL7 v2: `PID` (patient), `AIP` (personnel), `AIG/AIL/AIS` (resources)
+
+- **Appointment:** **Committed time block** for one or more Resources, with optional Participants. Prevents conflicts; supports multiple participants (like a calendar event).
+  → FHIR: `Appointment`
+  → HL7 v2: `SCH` (schedule activity), `SIU^S12` (booking), `SIU^S13–S15` (updates/cancel)
+
+- **Schedule:** Defines **availability** for a Resource via recurrence + exceptions. Not booked time.
+  → FHIR: `Schedule` + `Slot`
+  → HL7 v2: **No standard HL7 v2 message type exists for availability/schedules** — must be managed application-side
+
+- **Rule:** Schedules create availability; Appointments consume it. Resources own time; Participants join it.
+
+#### HL7 v2 Support Summary
+| Concept | HL7 v2 Supported? | Implementation |
+|---------|-------------------|----------------|
+| **Appointments** (booked time) | ✅ Yes | SIU messages: S12 (book), S13 (reschedule), S15 (cancel), S17 (delete), S23 (block) |
+| **Schedules** (availability) | ❌ No | No HL7 v2 standard; configure via webchart's scheduling system |
+
+> **FAQ:** "Is HL7 scheduling supported?" → HL7 v2 supports **appointments** (SIU^S12, etc.), but NOT **schedules/availability**. These are different concepts.
+
+
 ### 🎯 DRY (Don't Repeat Yourself)
 - **Never duplicate code**: If you find yourself copying code, extract it into a reusable function
 - **Single source of truth**: Each piece of knowledge should have one authoritative representation
@@ -113,7 +142,7 @@ src/
 - **Always use Mermaid diagrams** instead of ASCII art for workflow diagrams, architecture diagrams, and flowcharts
 - **Use memorable names** instead of single letters in diagrams (e.g., `Engine`, `Auth`, `Server` instead of `A`, `B`, `C`)
 - Use appropriate Mermaid diagram types:
-  - `graph TB` or `graph LR` for workflow architectures 
+  - `graph TB` or `graph LR` for workflow architectures
   - `flowchart TD` for process flows
   - `sequenceDiagram` for API interactions
   - `gitgraph` for branch/release strategies
