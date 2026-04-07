@@ -44,7 +44,7 @@ function formatDateDisplay(dateString: string): string {
 function getDateOptions(days: number = 180): string[] {
   const dates: string[] = [];
   const today = new Date();
-  
+
   for (let i = 0; i < days; i++) {
     const date = new Date(today);
     date.setDate(today.getDate() + i);
@@ -53,7 +53,7 @@ function getDateOptions(days: number = 180): string[] {
     const d = String(date.getDate()).padStart(2, '0');
     dates.push(`${y}-${m}-${d}`);
   }
-  
+
   return dates;
 }
 
@@ -65,10 +65,10 @@ function getMonthCalendarWeeks(year: number, month: number, availableDates: Set<
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   const startDayOfWeek = firstDay.getDay();
-  
+
   // Start first week with empty cells
   let currentWeek: (string | null)[] = new Array(startDayOfWeek).fill(null);
-  
+
   for (let d = 1; d <= lastDay.getDate(); d++) {
     if (currentWeek.length === 7) {
       weeks.push(currentWeek);
@@ -82,7 +82,7 @@ function getMonthCalendarWeeks(year: number, month: number, availableDates: Set<
       currentWeek.push(null); // Out of range
     }
   }
-  
+
   // Pad the last week
   if (currentWeek.length > 0) {
     while (currentWeek.length < 7) {
@@ -90,7 +90,7 @@ function getMonthCalendarWeeks(year: number, month: number, availableDates: Set<
     }
     weeks.push(currentWeek);
   }
-  
+
   return weeks;
 }
 
@@ -103,7 +103,7 @@ function groupSlotsByPeriod(slots: Slot[]): Record<string, Slot[]> {
     afternoon: [],
     evening: [],
   };
-  
+
   for (const slot of slots) {
     const hour = new Date(slot.start).getHours();
     if (hour < 12) {
@@ -114,7 +114,7 @@ function groupSlotsByPeriod(slots: Slot[]): Record<string, Slot[]> {
       groups.evening.push(slot);
     }
   }
-  
+
   return groups;
 }
 
@@ -142,21 +142,21 @@ export function SlotCalendar({
     const today = new Date();
     return { year: today.getFullYear(), month: today.getMonth() };
   });
-  
+
   // Ref for scrolling to time slots after date selection
   const timeSlotsRef = useRef<HTMLElement>(null);
-  
+
   const dateOptions = useMemo(() => getDateOptions(180), []);
   const dateOptionsSet = useMemo(() => new Set(dateOptions), [dateOptions]);
-  
+
   // Get calendar weeks for the current month view
   const calendarWeeks = useMemo(
     () => getMonthCalendarWeeks(currentMonth.year, currentMonth.month, dateOptionsSet),
     [currentMonth.year, currentMonth.month, dateOptionsSet]
   );
-  
+
   const groupedSlots = useMemo(() => groupSlotsByPeriod(slots), [slots]);
-  
+
   // Calculate min/max months for navigation bounds
   const { minMonth, maxMonth } = useMemo(() => {
     const today = new Date();
@@ -167,12 +167,12 @@ export function SlotCalendar({
       maxMonth: { year: endDate.getFullYear(), month: endDate.getMonth() },
     };
   }, []);
-  
-  const canGoPrev = currentMonth.year > minMonth.year || 
+
+  const canGoPrev = currentMonth.year > minMonth.year ||
     (currentMonth.year === minMonth.year && currentMonth.month > minMonth.month);
-  const canGoNext = currentMonth.year < maxMonth.year || 
+  const canGoNext = currentMonth.year < maxMonth.year ||
     (currentMonth.year === maxMonth.year && currentMonth.month < maxMonth.month);
-  
+
   const handlePrevMonth = useCallback(() => {
     if (!canGoPrev) return;
     setCurrentMonth((prev) => {
@@ -182,7 +182,7 @@ export function SlotCalendar({
       return { year: prev.year, month: prev.month - 1 };
     });
   }, [canGoPrev]);
-  
+
   const handleNextMonth = useCallback(() => {
     if (!canGoNext) return;
     setCurrentMonth((prev) => {
@@ -192,23 +192,23 @@ export function SlotCalendar({
       return { year: prev.year, month: prev.month + 1 };
     });
   }, [canGoNext]);
-  
+
   const currentMonthLabel = useMemo(() => {
     const date = new Date(currentMonth.year, currentMonth.month, 1);
     return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   }, [currentMonth.year, currentMonth.month]);
-  
+
   // Get availability data from store
   const dateAvailability = useSchedulerStore((state) => state.dateAvailability);
   const fetchDateAvailability = useSchedulerStore((state) => state.fetchDateAvailability);
-  
+
   // Fetch availability when component mounts or provider changes
   useEffect(() => {
     if (provider && dateOptions.length > 0) {
       fetchDateAvailability(dateOptions);
     }
   }, [provider, dateOptions, fetchDateAvailability]);
-  
+
   // Get only dates with availability for the compact view
   const availableDates = useMemo(() => {
     return dateOptions.filter((date) => {
@@ -216,7 +216,7 @@ export function SlotCalendar({
       return count !== undefined && count > 0;
     });
   }, [dateOptions, dateAvailability]);
-  
+
   const handleDateSelect = useCallback(
     (date: string) => {
       onDateChange(date);
@@ -227,7 +227,7 @@ export function SlotCalendar({
     },
     [onDateChange]
   );
-  
+
   return (
     <div className="fs-slot-calendar">
       <header className="fs-calendar-header">
@@ -246,7 +246,7 @@ export function SlotCalendar({
           Schedule with {getProviderName(provider)}
         </h2>
       </header>
-      
+
       {/* Date Picker */}
       <section className="fs-date-picker" aria-label="Select a date">
         <div className="fs-date-picker-header">
@@ -272,7 +272,7 @@ export function SlotCalendar({
             </button>
           </div>
         </div>
-        
+
         {/* Available dates list (compact view) */}
         {viewMode === 'available' && (
           <div className="fs-available-dates" role="listbox" aria-label="Available dates">
@@ -285,7 +285,7 @@ export function SlotCalendar({
                 const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
                 const monthDay = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 const slotCount = dateAvailability[date] ?? 0;
-                
+
                 return (
                   <button
                     key={date}
@@ -306,7 +306,7 @@ export function SlotCalendar({
             )}
           </div>
         )}
-        
+
         {/* Calendar grid view */}
         {viewMode === 'calendar' && (
           <div className="fs-calendar-container">
@@ -336,7 +336,7 @@ export function SlotCalendar({
                 </svg>
               </button>
             </div>
-            
+
             <div className="fs-calendar-grid" role="grid" aria-label="Available dates">
             {/* Weekday headers */}
             <div className="fs-calendar-header-row" role="row">
@@ -346,15 +346,15 @@ export function SlotCalendar({
                 </div>
               ))}
             </div>
-            
+
             {/* Calendar weeks */}
             {calendarWeeks.map((week, weekIndex) => (
               <div key={weekIndex} className="fs-calendar-week" role="row">
                 {week.map((date, dayIndex) => {
                   if (date === null) {
-                    return <div key={`empty-${dayIndex}`} className="fs-calendar-cell fs-empty" role="gridcell" />;
+                    return <div key={`empty-${dayIndex}`} className="fs-calendar-cell" role="gridcell" />;
                   }
-                  
+
                   const isSelected = date === selectedDate;
                   const dateObj = new Date(date + 'T00:00:00');
                   const dayNum = dateObj.getDate();
@@ -363,7 +363,7 @@ export function SlotCalendar({
                   const hasAvailability = slotCount !== null && slotCount > 0;
                   const noAvailability = slotCount === 0;
                   const isFirstOfMonth = dayNum === 1;
-                  
+
                   return (
                     <button
                       key={date}
@@ -388,14 +388,14 @@ export function SlotCalendar({
           </div>
         )}
       </section>
-      
+
       {/* Time Slots */}
       {selectedDate && (
         <section ref={timeSlotsRef} className="fs-time-slots" aria-label="Available times">
           <h3 className="fs-subsection-title">
             {formatDateDisplay(selectedDate)}
           </h3>
-          
+
           {loading ? (
             <div className="fs-loading-slots">
               <span className="fs-loading-text">Loading available times...</span>
@@ -408,14 +408,14 @@ export function SlotCalendar({
             <div className="fs-slot-groups">
               {Object.entries(groupedSlots).map(([period, periodSlots]) => {
                 if (periodSlots.length === 0) return null;
-                
+
                 const periodLabel =
                   period === 'morning'
                     ? '🌅 Morning'
                     : period === 'afternoon'
                     ? '☀️ Afternoon'
                     : '🌙 Evening';
-                
+
                 return (
                   <div key={period} className="fs-slot-group">
                     <h4 className="fs-period-label">{periodLabel}</h4>
@@ -455,11 +455,11 @@ export function ConnectedSlotCalendar() {
   const fetchSlots = useSchedulerStore((state) => state.fetchSlots);
   const selectSlot = useSchedulerStore((state) => state.selectSlot);
   const goBack = useSchedulerStore((state) => state.goBack);
-  
+
   if (!provider) {
     return null;
   }
-  
+
   return (
     <SlotCalendar
       provider={provider}
