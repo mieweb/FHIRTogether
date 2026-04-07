@@ -1,0 +1,219 @@
+{
+  "description": "Sample import data for FHIRTogether - a small clinic with 2 providers",
+  "schedules": [
+    {
+      "resourceType": "Schedule",
+      "id": "schedule-dr-chen",
+      "active": true,
+      "actor": [
+        {
+          "reference": "Practitioner/practitioner-chen",
+          "display": "Dr. Lisa Chen"
+        }
+      ],
+      "serviceType": [{ "text": "Family Medicine" }],
+      "planningHorizon": {
+        "start": "2026-04-01T00:00:00",
+        "end": "2026-10-01T00:00:00"
+      },
+      "comment": "Schedule for Dr. Lisa Chen - Family Medicine"
+    },
+    {
+      "resourceType": "Schedule",
+      "id": "schedule-dr-patel",
+      "active": true,
+      "actor": [
+        {
+          "reference": "Practitioner/practitioner-patel",
+          "display": "Dr. Raj Patel"
+        }
+      ],
+      "serviceType": [{ "text": "Internal Medicine" }],
+      "planningHorizon": {
+        "start": "2026-04-01T00:00:00",
+        "end": "2026-10-01T00:00:00"
+      },
+      "comment": "Schedule for Dr. Raj Patel - Internal Medicine"
+    }
+  ],
+  "slots": [
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-0900",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T09:00:00",
+      "end": "2026-04-07T09:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-0930",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T09:30:00",
+      "end": "2026-04-07T10:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-1000",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "busy",
+      "start": "2026-04-07T10:00:00",
+      "end": "2026-04-07T10:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-1030",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T10:30:00",
+      "end": "2026-04-07T11:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-1100",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T11:00:00",
+      "end": "2026-04-07T11:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-1400",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T14:00:00",
+      "end": "2026-04-07T14:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0407-1430",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-07T14:30:00",
+      "end": "2026-04-07T15:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0408-0900",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-08T09:00:00",
+      "end": "2026-04-08T09:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0408-0930",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-08T09:30:00",
+      "end": "2026-04-08T10:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-chen-0408-1000",
+      "schedule": { "reference": "Schedule/schedule-dr-chen" },
+      "status": "free",
+      "start": "2026-04-08T10:00:00",
+      "end": "2026-04-08T10:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0407-0800",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-07T08:00:00",
+      "end": "2026-04-07T08:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0407-0830",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "busy",
+      "start": "2026-04-07T08:30:00",
+      "end": "2026-04-07T09:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0407-0900",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-07T09:00:00",
+      "end": "2026-04-07T09:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0407-0930",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-07T09:30:00",
+      "end": "2026-04-07T10:00:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0407-1000",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-07T10:00:00",
+      "end": "2026-04-07T10:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0408-0800",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-08T08:00:00",
+      "end": "2026-04-08T08:30:00"
+    },
+    {
+      "resourceType": "Slot",
+      "id": "slot-patel-0408-0830",
+      "schedule": { "reference": "Schedule/schedule-dr-patel" },
+      "status": "free",
+      "start": "2026-04-08T08:30:00",
+      "end": "2026-04-08T09:00:00"
+    }
+  ],
+  "appointments": [
+    {
+      "resourceType": "Appointment",
+      "id": "appt-chen-001",
+      "status": "booked",
+      "slot": [{ "reference": "Slot/slot-chen-0407-1000" }],
+      "start": "2026-04-07T10:00:00",
+      "end": "2026-04-07T10:30:00",
+      "participant": [
+        {
+          "actor": { "reference": "Patient/patient-001", "display": "Maria Garcia" },
+          "status": "accepted"
+        },
+        {
+          "actor": { "reference": "Practitioner/practitioner-chen", "display": "Dr. Lisa Chen" },
+          "status": "accepted"
+        }
+      ],
+      "description": "Annual Physical",
+      "appointmentType": { "text": "Routine Checkup" }
+    },
+    {
+      "resourceType": "Appointment",
+      "id": "appt-patel-001",
+      "status": "booked",
+      "slot": [{ "reference": "Slot/slot-patel-0407-0830" }],
+      "start": "2026-04-07T08:30:00",
+      "end": "2026-04-07T09:00:00",
+      "participant": [
+        {
+          "actor": { "reference": "Patient/patient-002", "display": "James Wilson" },
+          "status": "accepted"
+        },
+        {
+          "actor": { "reference": "Practitioner/practitioner-patel", "display": "Dr. Raj Patel" },
+          "status": "accepted"
+        }
+      ],
+      "description": "Follow-up: Blood Pressure",
+      "appointmentType": { "text": "Follow-up Visit" }
+    }
+  ]
+}

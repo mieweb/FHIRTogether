@@ -9,6 +9,7 @@ import { SqliteStore } from './store/sqliteStore';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
+import { importRoutes } from './routes/importRoutes';
 import { hl7Routes } from './routes/hl7Routes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
 import { registerBasicAuth } from './auth/basicAuth';
@@ -134,6 +135,7 @@ async function buildServer() {
     await scheduleRoutes(instance, store);
     await slotRoutes(instance, store);
     await appointmentRoutes(instance, store);
+    await importRoutes(instance, store);
   });
 
   // Register HL7 routes
@@ -163,6 +165,8 @@ async function buildServer() {
         schedule: '/Schedule',
         slot: '/Slot',
         appointment: '/Appointment',
+        import: '/Import',
+        importTemplate: '/Import/template',
         hl7: '/hl7/siu',
         hl7Status: '/hl7/status',
         health: '/health',
