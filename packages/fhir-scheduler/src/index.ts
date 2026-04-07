@@ -5,6 +5,7 @@ export { SlotCalendar, ConnectedSlotCalendar } from './components/SlotCalendar';
 export { BookingForm, ConnectedBookingForm } from './components/BookingForm';
 export { Confirmation, ConnectedConfirmation } from './components/Confirmation';
 export { AppointmentList } from './components/AppointmentList';
+export { ImportData } from './components/ImportData';
 
 // Store exports
 export { useSchedulerStore } from './store/schedulerStore';
