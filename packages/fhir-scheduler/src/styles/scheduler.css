@@ -103,11 +103,6 @@
 }
 
 /* Empty states */
-.fs-empty {
-  padding: 3rem 0;
-  text-align: center;
-}
-
 .fs-empty-message {
   color: #6b7280;
 }
@@ -467,10 +462,6 @@
   position: relative;
 }
 
-.fs-calendar-cell.fs-empty {
-  background-color: #fafafa;
-}
-
 .fs-date-option {
   border: none;
   cursor: pointer;
@@ -553,31 +544,31 @@
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .fs-calendar-cell {
     height: 32px;
   }
-  
+
   .fs-calendar-header-cell {
     font-size: 0.5rem;
     padding: 0.25rem 0.125rem;
   }
-  
+
   .fs-day-number {
     font-size: 0.75rem;
   }
-  
+
   .fs-month-label {
     font-size: 0.375rem;
   }
-  
+
   .fs-availability-dot {
     width: 4px;
     height: 4px;
     top: 2px;
     right: 2px;
   }
-  
+
   .fs-available-date-btn {
     min-width: 60px;
     padding: 0.375rem 0.5rem;
