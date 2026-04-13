@@ -18,8 +18,8 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
           properties: {
             schedule: { type: 'string', description: 'Schedule reference' },
             status: { type: 'string', enum: ['busy', 'free', 'busy-unavailable', 'busy-tentative'] },
-            start: { type: 'string', format: 'date-time', description: 'Start time filter' },
-            end: { type: 'string', format: 'date-time', description: 'End time filter' },
+            start: { type: 'string', description: 'Start time filter (date or date-time)' },
+            end: { type: 'string', description: 'End time filter (date or date-time)' },
             _count: { type: 'number', description: 'Max results to return' },
           },
         },

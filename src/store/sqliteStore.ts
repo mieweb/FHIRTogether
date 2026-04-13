@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import {
   FhirStore,
+  StoreCapabilities,
   Schedule,
   Slot,
   Appointment,
@@ -12,6 +13,15 @@ import {
 } from '../types/fhir';
 
 export class SqliteStore implements FhirStore {
+  readonly name = 'sqlite';
+
+  readonly capabilities: StoreCapabilities = {
+    scheduleWrite: true,
+    slotWrite: true,
+    bulkDelete: true,
+    appointmentIdentifierLookup: false,  // no identifier column — falls back to scan
+  };
+
   private db: Database.Database;
 
   constructor(dbPath?: string) {
@@ -443,6 +453,15 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllAppointments(): Promise<void> {
     this.db.prepare('DELETE FROM appointments').run();
+  }
+
+  async getAppointmentByIdentifier(system: string, value: string): Promise<Appointment | null> {
+    // SQLite doesn't store identifiers in a queryable column, so scan.
+    // For the common booking-reference case, limit to recent appointments.
+    const appointments = await this.getAppointments({ _count: 200 });
+    return appointments.find(appt =>
+      appt.identifier?.some(id => id.system === system && id.value === value)
+    ) || null;
   }
 
   // ==================== HELPER METHODS ====================

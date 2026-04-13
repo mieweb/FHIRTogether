@@ -3,12 +3,13 @@ import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { config } from 'dotenv';
-import { SqliteStore } from './store/sqliteStore';
+import { createStore } from './store';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
 import { hl7Routes } from './routes/hl7Routes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
+import { registerMcpRoutes } from './mcp/mcpServer';
 
 // Load environment variables
 config();
@@ -22,6 +23,7 @@ const HL7_TLS_ENABLED = process.env.HL7_TLS_ENABLED === 'true';
 const HL7_TLS_KEY = process.env.HL7_TLS_KEY;
 const HL7_TLS_CERT = process.env.HL7_TLS_CERT;
 const HL7_TLS_CA = process.env.HL7_TLS_CA;
+const ENABLE_MCP = process.env.ENABLE_MCP === 'true';
 
 async function buildServer() {
   const fastify = Fastify({
@@ -83,15 +85,17 @@ async function buildServer() {
     staticCSP: false,
   });
 
-  // Initialize store
-  let store;
-  if (STORE_BACKEND === 'sqlite') {
-    store = new SqliteStore();
-    await store.initialize();
-    fastify.log.info('SQLite store initialized');
-  } else {
-    throw new Error(`Unsupported store backend: ${STORE_BACKEND}`);
-  }
+  // Initialize store via factory
+  const store = createStore({
+    backend: STORE_BACKEND,
+    dbPath: process.env.SQLITE_DB_PATH,
+    baseUrl: process.env.WEBCHART_URL,
+    username: process.env.WEBCHART_USERNAME,
+    password: process.env.WEBCHART_PASSWORD,
+    defaultLocation: process.env.WEBCHART_DEFAULT_LOCATION || '0',
+  });
+  await store.initialize();
+  fastify.log.info({ backend: store.name }, 'Store initialized');
 
   // Register routes
   await fastify.register(async (instance) => {
@@ -100,6 +104,12 @@ async function buildServer() {
     await appointmentRoutes(instance, store);
     await hl7Routes(instance, store);
   });
+
+  // Register MCP SSE routes if enabled
+  if (ENABLE_MCP) {
+    await registerMcpRoutes(fastify, store);
+    fastify.log.info('MCP server enabled — SSE endpoint at /mcp/sse');
+  }
 
   // Health check endpoint
   fastify.get('/health', async () => {
@@ -126,6 +136,10 @@ async function buildServer() {
         hl7Status: '/hl7/status',
         health: '/health',
       },
+      mcp: ENABLE_MCP ? {
+        sse: '/mcp/sse',
+        messages: '/mcp/messages',
+      } : null,
       hl7Socket: HL7_SOCKET_ENABLED ? {
         port: HL7_SOCKET_PORT,
         tls: HL7_TLS_ENABLED,
@@ -191,6 +205,9 @@ async function start() {
     console.log(`📚 API Documentation: http://localhost:${PORT}/docs`);
     console.log(`💾 Store Backend: ${STORE_BACKEND}`);
     console.log(`🧪 Test Endpoints: ${process.env.ENABLE_TEST_ENDPOINTS === 'true' ? 'Enabled' : 'Disabled'}`);
+    if (ENABLE_MCP) {
+      console.log(`🔌 MCP SSE Endpoint: http://localhost:${PORT}/mcp/sse`);
+    }
     if (HL7_SOCKET_ENABLED) {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
     }

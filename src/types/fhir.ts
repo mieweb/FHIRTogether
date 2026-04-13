@@ -137,9 +137,38 @@ export interface FhirAppointmentQuery {
 }
 
 /**
+ * Store Capabilities — declares what a backend can and cannot do.
+ * Safe default: if a capability is missing, assume false.
+ */
+export interface StoreCapabilities {
+  /** Backend supports creating/mutating schedules (SQLite yes, WebChart no) */
+  scheduleWrite: boolean;
+  /** Backend supports creating/mutating slots directly (SQLite yes, WebChart computes them) */
+  slotWrite: boolean;
+  /** Backend supports bulk delete operations */
+  bulkDelete: boolean;
+  /** Backend can look up an appointment by an identifier (system+value) without brute-force scan */
+  appointmentIdentifierLookup: boolean;
+}
+
+/**
+ * Configuration union for creating a store via the factory.
+ */
+export interface StoreConfig {
+  backend: string;
+  [key: string]: unknown;
+}
+
+/**
  * Store Interface
  */
 export interface FhirStore {
+  /** Human-readable name of the backend (e.g. "sqlite", "webchart") */
+  readonly name: string;
+
+  /** Declares what this backend supports */
+  readonly capabilities: StoreCapabilities;
+
   // Slot operations
   getSlots(query: FhirSlotQuery): Promise<Slot[]>;
   getSlotById(id: string): Promise<Slot | null>;
@@ -163,6 +192,13 @@ export interface FhirStore {
   updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment>;
   deleteAppointment(id: string): Promise<void>;
   deleteAllAppointments(): Promise<void>;
+
+  /**
+   * Look up an appointment by an identifier (system + value).
+   * Backends that support efficient identifier lookup should query directly;
+   * others fall back to scanning via getAppointments().
+   */
+  getAppointmentByIdentifier(system: string, value: string): Promise<Appointment | null>;
 
   // Utility
   initialize(): Promise<void>;
