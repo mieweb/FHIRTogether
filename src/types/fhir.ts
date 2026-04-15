@@ -304,6 +304,7 @@ export interface FhirStore {
   // Appointment operations
   getAppointments(query: FhirAppointmentQuery): Promise<Appointment[]>;
   getAppointmentById(id: string): Promise<Appointment | null>;
+  getAppointmentByIdentifier(system: string, value: string): Promise<Appointment | null>;
   createAppointment(appointment: Appointment): Promise<Appointment>;
   updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment>;
   deleteAppointment(id: string): Promise<void>;

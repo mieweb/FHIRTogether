@@ -133,6 +133,7 @@ export class SqliteStore implements FhirStore {
         id TEXT PRIMARY KEY,
         resource_type TEXT NOT NULL DEFAULT 'Appointment',
         status TEXT NOT NULL,
+        identifier TEXT,
         cancelation_reason TEXT,
         service_category TEXT,
         service_type TEXT,
@@ -772,6 +773,18 @@ export class SqliteStore implements FhirStore {
     return { ...slot, id, meta: { lastUpdated: now } };
   }
 
+  /**
+   * Un-shift a date by the offset so it matches raw DB values.
+   * shiftDate adds offsetDays on read; this subtracts them for queries.
+   */
+  private unshiftDate(isoDate: string): string {
+    const offsetDays = this.getDateOffsetDays();
+    if (offsetDays === 0) return isoDate;
+    const date = new Date(isoDate);
+    date.setDate(date.getDate() - offsetDays);
+    return date.toISOString();
+  }
+
   async getSlots(query: FhirSlotQuery): Promise<Slot[]> {
     let sql = 'SELECT * FROM slots WHERE 1=1';
     const params: SqlParam[] = [];
@@ -789,12 +802,12 @@ export class SqliteStore implements FhirStore {
 
     if (query.start) {
       sql += ' AND start >= ?';
-      params.push(query.start);
+      params.push(this.unshiftDate(query.start));
     }
 
     if (query.end) {
       sql += ' AND end <= ?';
-      params.push(query.end);
+      params.push(this.unshiftDate(query.end));
     }
 
     sql += ' ORDER BY start ASC';
@@ -889,9 +902,10 @@ export class SqliteStore implements FhirStore {
 
     const stmt = this.db.prepare(`
       INSERT INTO appointments (
-        id, status, cancelation_reason, service_category, service_type,
+        id, status, identifier, cancelation_reason, service_category, service_type,
         specialty, appointment_type, reason_code, priority, description,
         slot_refs, start, end, created, comment, patient_instruction,
+<<<<<<< HEAD
         participant, identifier, meta_last_updated
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
@@ -899,6 +913,7 @@ export class SqliteStore implements FhirStore {
     stmt.run(
       id,
       appointment.status,
+      JSON.stringify(appointment.identifier || []),
       JSON.stringify(appointment.cancelationReason),
       JSON.stringify(appointment.serviceCategory || []),
       JSON.stringify(appointment.serviceType || []),
@@ -976,6 +991,23 @@ export class SqliteStore implements FhirStore {
   async getAppointmentById(id: string): Promise<Appointment | null> {
     const row = this.db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToAppointment(row) : null;
+  }
+
+  async getAppointmentByIdentifier(system: string, value: string): Promise<Appointment | null> {
+    // Search through appointments to find one with matching identifier
+    const rows = this.db.prepare('SELECT * FROM appointments').all() as any[];
+    for (const row of rows) {
+      const identifiers = this.parseJson(row.identifier) as Array<{ system?: string; value: string }> | undefined;
+      if (identifiers) {
+        const match = identifiers.find(
+          (id) => id.system === system && id.value === value
+        );
+        if (match) {
+          return this.rowToAppointment(row);
+        }
+      }
+    }
+    return null;
   }
 
   async updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment> {
@@ -1268,6 +1300,7 @@ export class SqliteStore implements FhirStore {
       resourceType: 'Appointment',
       id: row.id,
       status: row.status,
+      identifier: this.parseJson(row.identifier),
       cancelationReason: this.parseJson(row.cancelation_reason),
       serviceCategory: this.parseJson(row.service_category),
       serviceType: this.parseJson(row.service_type),
