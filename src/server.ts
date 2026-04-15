@@ -18,6 +18,7 @@ import { directoryRoutes } from './routes/directoryRoutes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
 // Basic auth is now handled internally by apiKeyAuth as a fallback
 import { registerApiKeyAuth } from './auth/apiKeyAuth';
+import { createMcpServer } from './mcp/mcpServer';
 
 // Load environment variables
 config();
@@ -37,6 +38,7 @@ const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   : [];
 const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
 const EVAPORATION_CHECK_INTERVAL_HOURS = parseInt(process.env.EVAPORATION_CHECK_INTERVAL_HOURS || '1', 10);
+const ENABLE_MCP = process.env.ENABLE_MCP === 'true';
 
 /** Recursively find the newest mtime in a directory tree. */
 function getNewestMtime(dir: string): number {
@@ -51,6 +53,7 @@ function getNewestMtime(dir: string): number {
   }
   return newest;
 }
+>>>>>>> d19d19d (feat(mcp): Implement MCP server and appointment management tools)
 
 async function buildServer() {
   const fastify = Fastify({
@@ -220,6 +223,13 @@ async function buildServer() {
     await hl7Routes(instance, store);
   });
 
+  // Register MCP server if enabled
+  if (ENABLE_MCP) {
+    const mcpServer = createMcpServer(store);
+    mcpServer.registerRoutes(fastify);
+    fastify.log.info('MCP server enabled');
+  }
+
   // Health check endpoint
   fastify.get('/health', async () => {
     return {
@@ -229,6 +239,7 @@ async function buildServer() {
     };
   });
 
+<<<<<<< HEAD
   // Root endpoint — serve customizable welcome page (HTML) or JSON metadata
   fastify.get('/', async (request, reply) => {
     const accept = (request.headers.accept || '').toLowerCase();
@@ -260,6 +271,9 @@ async function buildServer() {
           port: HL7_SOCKET_PORT,
           tls: HL7_TLS_ENABLED,
         } : null,
+        ...(ENABLE_MCP ? {
+          mcp: { enabled: true },
+        } : {}),
       };
     }
 
@@ -373,6 +387,9 @@ async function start() {
     if (HL7_SOCKET_ENABLED) {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
       console.log(`🔐 HL7 Socket IPs: ${HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS.join(', ') : '⚠️  ALL (set HL7_MLLP_ALLOWED_IPS)'}`);
+    }
+    if (ENABLE_MCP) {
+      console.log(`🤖 MCP Server: http://${HOST}:${PORT}/mcp/sse`);
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
