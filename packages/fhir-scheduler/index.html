@@ -88,8 +88,10 @@
   <script type="module">
     import './dist/standalone.js';
 
-    // Determine FHIR API base URL - use same origin
-    const fhirBaseUrl = window.location.origin;
+    // Determine FHIR API base URL - use localhost:4010 for dev, same origin in production
+    const fhirBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:4010'
+      : window.location.origin;
 
     // Sample intake questionnaire for screening patients
     const intakeQuestionnaire = {
