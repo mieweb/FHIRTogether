@@ -4,9 +4,10 @@ import { SchedulerWidget } from './components/SchedulerWidget';
 import type { Appointment, FormsRendererFormData } from './types';
 import schedulerStyles from './styles/scheduler.css?inline';
 
+
 /**
  * FHIR Scheduler Web Component
- * 
+ *
  * Usage:
  * ```html
  * <fhir-scheduler
@@ -18,54 +19,58 @@ import schedulerStyles from './styles/scheduler.css?inline';
 class FhirSchedulerElement extends HTMLElement {
   private root: Root | null = null;
   private _questionnaireFormData: FormsRendererFormData | undefined = undefined;
-  
+
   static get observedAttributes() {
     return ['fhir-base-url', 'provider-id', 'hold-duration'];
   }
-  
+
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
   }
-  
+
   connectedCallback() {
     this.render();
   }
-  
+
   disconnectedCallback() {
     if (this.root) {
       this.root.unmount();
       this.root = null;
     }
   }
-  
+
   attributeChangedCallback() {
     this.render();
   }
-  
+
   get questionnaireFormData(): FormsRendererFormData | undefined {
     return this._questionnaireFormData;
   }
-  
+
   set questionnaireFormData(value: FormsRendererFormData | undefined) {
     this._questionnaireFormData = value;
     this.render();
   }
-  
+
   private render() {
     if (!this.shadowRoot) return;
-    
+
     const fhirBaseUrl = this.getAttribute('fhir-base-url');
     if (!fhirBaseUrl) {
       this.shadowRoot.innerHTML = '<p style="color: red;">Error: fhir-base-url attribute is required</p>';
       return;
     }
-    
+
     const providerId = this.getAttribute('provider-id') || undefined;
     const holdDuration = parseInt(this.getAttribute('hold-duration') || '5', 10);
-    
+
     // Create container and inject styles
     if (!this.shadowRoot.querySelector('#fhir-scheduler-container')) {
+      // forms-renderer injects Tailwind CSS into document.head; copy it into shadow root too
+      const formsRendererStyles = document.querySelector('#questionnaire-renderer-react-styles');
+      const formsRendererStylesContent = formsRendererStyles?.textContent ?? '';
+
       this.shadowRoot.innerHTML = `
         <style>
           :host {
@@ -74,17 +79,18 @@ class FhirSchedulerElement extends HTMLElement {
           }
           ${schedulerStyles}
         </style>
+        ${formsRendererStylesContent ? `<style id="questionnaire-renderer-react-styles">${formsRendererStylesContent}</style>` : ''}
         <div id="fhir-scheduler-container"></div>
       `;
     }
-    
+
     const container = this.shadowRoot.querySelector('#fhir-scheduler-container');
     if (!container) return;
-    
+
     if (!this.root) {
       this.root = createRoot(container);
     }
-    
+
     const handleComplete = (appointment: Appointment) => {
       this.dispatchEvent(
         new CustomEvent('complete', {
@@ -94,7 +100,7 @@ class FhirSchedulerElement extends HTMLElement {
         })
       );
     };
-    
+
     const handleError = (error: Error) => {
       this.dispatchEvent(
         new CustomEvent('error', {
@@ -104,7 +110,7 @@ class FhirSchedulerElement extends HTMLElement {
         })
       );
     };
-    
+
     this.root.render(
       React.createElement(SchedulerWidget, {
         fhirBaseUrl,
