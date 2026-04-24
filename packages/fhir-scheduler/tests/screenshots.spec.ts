@@ -168,9 +168,9 @@ test.describe('Documentation Screenshots', () => {
     await page.getByRole('button', { name: /Select Dr\./ }).first().click();
     await expect(page.getByRole('option').first()).toBeVisible({ timeout: 10000 });
     await page.getByRole('option').nth(dateIndex).click();
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
+    const slotLocator = page.locator('.fs-slot-button');
+    await expect(slotLocator.first()).toBeVisible({ timeout: 10000 });
     // Use last() when slotIndex is -1 to avoid slot conflicts
-    const slotLocator = page.getByRole('option', { name: /AM|PM/ });
     if (slotIndex === -1) {
       await slotLocator.last().click();
     } else {
@@ -302,7 +302,9 @@ test.describe('Documentation Screenshots', () => {
     await selectFollowUpVisit(page);
     await page.getByRole('button', { name: /Select Dr\./ }).first().click();
     await page.getByRole('option').nth(21).click();
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const mobileSlotButtons = page.locator('.fs-slot-button');
+    await expect(mobileSlotButtons.first()).toBeVisible({ timeout: 10000 });
+    await mobileSlotButtons.last().click();
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
     await takeScreenshot(page, '09-mobile-booking', true);
   });

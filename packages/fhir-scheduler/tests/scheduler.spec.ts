@@ -103,8 +103,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(5).click();
     
     // Select last available time slot to avoid conflicts with other tests
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const slotButtons = page.locator('.fs-slot-button');
+    await expect(slotButtons.first()).toBeVisible({ timeout: 10000 });
+    await slotButtons.last().click();
     
     // Should show booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -162,8 +163,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(7).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const slotButtons = page.locator('.fs-slot-button');
+    await expect(slotButtons.first()).toBeVisible({ timeout: 10000 });
+    await slotButtons.last().click();
     
     // Should be on booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -187,8 +189,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(9).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const slotButtons2 = page.locator('.fs-slot-button');
+    await expect(slotButtons2.first()).toBeVisible({ timeout: 10000 });
+    await slotButtons2.last().click();
     
     // Wait for booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -231,8 +234,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(11).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const slotButtons3 = page.locator('.fs-slot-button');
+    await expect(slotButtons3.first()).toBeVisible({ timeout: 10000 });
+    await slotButtons3.last().click();
     
     // Should show booking form without patient info fields
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
