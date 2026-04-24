@@ -43,9 +43,34 @@
       margin-top: 2rem;
       font-size: 0.875rem;
     }
+    .sandbox-banner {
+      background: rgba(255,255,255,0.15);
+      border-bottom: 2px solid #fbbf24;
+      color: #fef3c7;
+      text-align: center;
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .home-link {
+      position: absolute;
+      top: 1rem;
+      left: 1rem;
+      color: rgba(255,255,255,0.8);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .home-link:hover {
+      color: white;
+    }
   </style>
 </head>
 <body>
+  <div class="sandbox-banner" role="alert">
+    ⚠️ SANDBOX ENVIRONMENT &mdash; Do not enter Protected Health Information (PHI). All data is synthetic.
+  </div>
+  <a href="/" class="home-link" aria-label="Home">&larr; Home</a>
   <div class="container">
     <h1>🗓️ FHIR Scheduler Widget</h1>
     <p class="subtitle">Embeddable appointment scheduling component</p>

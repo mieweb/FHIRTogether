@@ -123,6 +123,13 @@ async function buildServer() {
     staticCSP: false,
   });
 
+  // Serve customizable public assets (welcome page, etc.)
+  await fastify.register(fastifyStatic, {
+    root: path.join(__dirname, '..', 'public'),
+    prefix: '/public/',
+    decorateReply: true,
+  });
+
   // Register static file serving for the scheduler demo
   await fastify.register(fastifyStatic, {
     root: path.join(__dirname, '..', 'packages', 'fhir-scheduler'),
@@ -203,31 +210,39 @@ async function buildServer() {
     };
   });
 
-  // Root endpoint
-  fastify.get('/', async () => {
-    return {
-      name: 'FHIRTogether Scheduling Synapse',
-      version: '1.0.0',
-      description: 'FHIR-compliant gateway and test server for schedule and appointment availability',
-      documentation: '/docs',
-      demo: '/demo',
-      fhirVersion: 'R4',
-      endpoints: {
-        schedule: '/Schedule',
-        slot: '/Slot',
-        appointment: '/Appointment',
-        import: '/Import',
-        importTemplate: '/Import/template',
-        hl7: '/hl7/siu',
-        hl7Status: '/hl7/status',
-        health: '/health',
+  // Root endpoint — serve customizable welcome page (HTML) or JSON metadata
+  fastify.get('/', async (request, reply) => {
+    const accept = (request.headers.accept || '').toLowerCase();
+
+    // Serve JSON for API clients that explicitly request it
+    if (accept.includes('application/json') && !accept.includes('text/html')) {
+      return {
+        name: 'FHIRTogether Scheduling Synapse',
+        version: '1.0.0',
+        description: 'FHIR-compliant gateway and test server for schedule and appointment availability',
+        documentation: '/docs',
         demo: '/demo',
-      },
-      hl7Socket: HL7_SOCKET_ENABLED ? {
-        port: HL7_SOCKET_PORT,
-        tls: HL7_TLS_ENABLED,
-      } : null,
-    };
+        fhirVersion: 'R4',
+        endpoints: {
+          schedule: '/Schedule',
+          slot: '/Slot',
+          appointment: '/Appointment',
+          import: '/Import',
+          importTemplate: '/Import/template',
+          hl7: '/hl7/siu',
+          hl7Status: '/hl7/status',
+          health: '/health',
+          demo: '/demo',
+        },
+        hl7Socket: HL7_SOCKET_ENABLED ? {
+          port: HL7_SOCKET_PORT,
+          tls: HL7_TLS_ENABLED,
+        } : null,
+      };
+    }
+
+    // Serve the welcome page HTML from public/index.html
+    return reply.sendFile('index.html', path.join(__dirname, '..', 'public'));
   });
 
   // Graceful shutdown

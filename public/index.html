@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FHIRTogether Scheduling Synapse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/@mieweb/ui/dist/brands/bluehive.css">
+  <style>
+    body {
+      background: var(--mieweb-background);
+      color: var(--mieweb-foreground);
+      line-height: 1.6;
+    }
+
+    .welcome-header {
+      background: linear-gradient(135deg, var(--mieweb-primary-700) 0%, var(--mieweb-primary-500) 100%);
+      color: white;
+      padding: 3rem 1.5rem 2.5rem;
+      text-align: center;
+    }
+
+    .welcome-header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .welcome-header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .welcome-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      border-radius: 999px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      letter-spacing: 0.03em;
+    }
+
+    .welcome-content {
+      max-width: 800px;
+      margin: -1.5rem auto 2rem;
+      padding: 0 1.5rem;
+    }
+
+    .welcome-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .welcome-card {
+      background: var(--mieweb-card);
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-lg);
+      padding: 1.5rem;
+      text-decoration: none;
+      color: var(--mieweb-foreground);
+      transition: box-shadow 0.2s, transform 0.2s;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .welcome-card:hover {
+      box-shadow: var(--mieweb-shadow-dropdown);
+      transform: translateY(-2px);
+    }
+
+    .welcome-card-icon {
+      font-size: 1.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .welcome-card h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.35rem;
+    }
+
+    .welcome-card p {
+      font-size: 0.88rem;
+      color: var(--mieweb-muted-foreground);
+      flex: 1;
+    }
+
+    .welcome-section {
+      background: var(--mieweb-card);
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-lg);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .welcome-section h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+    }
+
+    .welcome-endpoints {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.35rem 1rem;
+      font-size: 0.88rem;
+    }
+
+    .welcome-endpoints code {
+      font-family: var(--mieweb-font-mono);
+      background: var(--mieweb-muted);
+      padding: 0.15rem 0.5rem;
+      border-radius: var(--mieweb-radius-sm);
+      font-size: 0.82rem;
+      color: var(--mieweb-primary-700);
+    }
+
+    .welcome-endpoints span {
+      color: var(--mieweb-muted-foreground);
+    }
+
+    .welcome-footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--mieweb-muted-foreground);
+      font-size: 0.82rem;
+    }
+
+    .welcome-footer a {
+      color: var(--mieweb-primary-600);
+      text-decoration: none;
+    }
+
+    .welcome-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .sandbox-banner {
+      background: var(--mieweb-warning-100);
+      border-bottom: 2px solid var(--mieweb-warning-500);
+      color: var(--mieweb-warning-900);
+      text-align: center;
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="sandbox-banner" role="alert">
+    ⚠️ SANDBOX ENVIRONMENT &mdash; Do not enter Protected Health Information (PHI). All data is synthetic.
+  </div>
+  <header class="welcome-header">
+    <div class="welcome-badge">FHIR R4 &middot; Open Source</div>
+    <h1>FHIRTogether Scheduling Synapse</h1>
+    <p>A FHIR-compliant scheduling gateway for provider availability, time-slot management, and appointment booking.</p>
+  </header>
+
+  <main class="welcome-content">
+    <nav class="welcome-cards" aria-label="Quick links">
+      <a class="welcome-card" href="/docs" aria-label="API Documentation">
+        <div class="welcome-card-icon" aria-hidden="true">📚</div>
+        <h2>API Documentation</h2>
+        <p>Interactive Swagger UI to explore and test the FHIR scheduling endpoints.</p>
+      </a>
+      <a class="welcome-card" href="/demo" aria-label="Scheduler Demo">
+        <div class="welcome-card-icon" aria-hidden="true">🗓️</div>
+        <h2>Scheduler Demo</h2>
+        <p>Proof-of-concept embeddable scheduler widget for patient self-scheduling.</p>
+      </a>
+      <a class="welcome-card" href="https://github.com/mieweb/FHIRTogether" target="_blank" rel="noopener noreferrer" aria-label="GitHub Repository">
+        <div class="welcome-card-icon" aria-hidden="true">💻</div>
+        <h2>GitHub Repository</h2>
+        <p>Source code, documentation, and contribution guidelines for the project.</p>
+      </a>
+    </nav>
+
+    <section class="welcome-section" aria-label="Available FHIR endpoints">
+      <h3>FHIR Endpoints</h3>
+      <div class="welcome-endpoints">
+        <code>GET /Schedule</code>  <span>Provider schedule &amp; availability management</span>
+        <code>GET /Slot</code>      <span>Time-slot availability queries</span>
+        <code>GET /Appointment</code> <span>Appointment booking &amp; management</span>
+        <code>POST /hl7/siu</code>  <span>HL7v2 SIU message ingestion</span>
+        <code>POST /Import</code>   <span>Bulk FHIR resource import</span>
+        <code>GET /health</code>    <span>Server health check</span>
+      </div>
+    </section>
+
+    <section class="welcome-section" aria-label="About this project">
+      <h3>About</h3>
+      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+        FHIRTogether bridges legacy HL7v2 EHR systems and modern FHIR R4 clients,
+        providing a pluggable scheduling gateway with SQLite-backed storage.
+        It supports Schedule, Slot, and Appointment resources along with HL7v2 SIU
+        message translation &mdash; making it easy to integrate scheduling into any
+        healthcare workflow.
+      </p>
+    </section>
+  </main>
+
+  <footer class="welcome-footer">
+    <p>
+      <a href="https://github.com/mieweb/FHIRTogether">FHIRTogether</a>
+      is open source under the
+      <a href="https://opensource.org/licenses/MIT">MIT License</a>.
+      Built by <a href="https://bluehive.com">BlueHive</a>.
+    </p>
+  </footer>
+</body>
+</html>

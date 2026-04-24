@@ -63,15 +63,29 @@
       max-width: 1200px;
       margin: 0 auto;
     }
+    .sandbox-banner {
+      background: #fef3c7;
+      border-bottom: 2px solid #f59e0b;
+      color: #78350f;
+      text-align: center;
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
   </style>
 </head>
 <body>
+  <div class="sandbox-banner" role="alert">
+    ⚠️ SANDBOX ENVIRONMENT &mdash; Do not enter Protected Health Information (PHI). All data is synthetic.
+  </div>
   <header>
     <h1>🗓️ FHIR Scheduler Widget</h1>
     <p>Embeddable appointment scheduling component with patient intake form</p>
   </header>
 
   <nav class="demo-nav" aria-label="Demo navigation">
+    <a href="/">Home</a>
     <a href="./index.html" class="active">Book Appointment</a>
     <a href="./provider-view.html">Provider View</a>
   </nav>
