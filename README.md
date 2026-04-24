@@ -12,6 +12,16 @@
 - Serving as a **test server** to prototype or simulate provider group schedules
 - Enabling **public applications** to discover and book available time
 
+## Sandbox Environment
+
+We are hosinting a public sandbox environment for testing and development at: https://fhirtogether.os.mieweb.org/ 
+
+We have an Enterprise Health EHR and WebChart EHR sandbox environment available for testing and development. If you want to test with real EHR data or simulate HL7v2 message ingestion, please reach out to us to get access.  If you would like to add your own EHR sandbox environment to the public testing environment, please reach out to us as well.
+
+https://masterdaily.dev.webchart.app/ - WebChart EHR Sandbox
+https://ehbhdemo.enterprise.health - Enterprise Health EHR Sandbox
+
+
 ---
 
 ## 🔥 Key Features
