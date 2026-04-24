@@ -5,7 +5,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import { config } from 'dotenv';
 import path from 'path';
-import { SqliteStore } from './store/sqliteStore';
+import fs from 'fs';
+import { SqliteStore, SCHEMA_VERSION } from './store/sqliteStore';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
@@ -31,6 +32,20 @@ const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   ? process.env.HL7_MLLP_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
   : [];
 const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
+
+/** Recursively find the newest mtime in a directory tree. */
+function getNewestMtime(dir: string): number {
+  let newest = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, getNewestMtime(full));
+    } else {
+      newest = Math.max(newest, fs.statSync(full).mtimeMs);
+    }
+  }
+  return newest;
+}
 
 async function buildServer() {
   const fastify = Fastify({
@@ -122,12 +137,48 @@ async function buildServer() {
 
   // Initialize store
   let store;
+  const startupWarnings: string[] = [];
+
   if (STORE_BACKEND === 'sqlite') {
     store = new SqliteStore();
-    await store.initialize();
-    fastify.log.info('SQLite store initialized');
+    const schemaStatus = await store.initialize();
+
+    if (!schemaStatus.match) {
+      startupWarnings.push(
+        `⚠️  DB schema mismatch: database is v${schemaStatus.current}, code expects v${SCHEMA_VERSION}`,
+        `   Auto-migrated to v${SCHEMA_VERSION} — verify data with: npm run generate-data`,
+        `   Or reset the database:  rm data/fhirtogether.db && npm run generate-data`,
+      );
+    } else if (schemaStatus.migrated && schemaStatus.current === 0) {
+      fastify.log.info('Fresh database — schema created at v' + SCHEMA_VERSION);
+    }
+
+    fastify.log.info('SQLite store initialized (schema v' + SCHEMA_VERSION + ')');
   } else {
     throw new Error(`Unsupported store backend: ${STORE_BACKEND}`);
+  }
+
+  // Check if the scheduler widget build is stale
+  const schedulerDistPath = path.join(__dirname, '..', 'packages', 'fhir-scheduler', 'dist', 'standalone.js');
+  const schedulerSrcDir = path.join(__dirname, '..', 'packages', 'fhir-scheduler', 'src');
+  try {
+    if (!fs.existsSync(schedulerDistPath)) {
+      startupWarnings.push(
+        '⚠️  Scheduler widget not built — /demo will not work',
+        '   Run:  cd packages/fhir-scheduler && npm run build:standalone',
+      );
+    } else {
+      const distMtime = fs.statSync(schedulerDistPath).mtimeMs;
+      const newestSrc = getNewestMtime(schedulerSrcDir);
+      if (newestSrc > distMtime) {
+        startupWarnings.push(
+          '⚠️  Scheduler widget build is stale (source files are newer than dist)',
+          '   Run:  cd packages/fhir-scheduler && npm run build:standalone',
+        );
+      }
+    }
+  } catch {
+    // Non-fatal — skip build check if paths don't exist
   }
 
   // Register routes
@@ -190,12 +241,12 @@ async function buildServer() {
   process.on('SIGINT', () => closeGracefully('SIGINT'));
   process.on('SIGTERM', () => closeGracefully('SIGTERM'));
 
-  return { fastify, store };
+  return { fastify, store, startupWarnings };
 }
 
 async function start() {
   try {
-    const { fastify, store } = await buildServer();
+    const { fastify, store, startupWarnings } = await buildServer();
     await fastify.listen({ port: PORT, host: HOST });
 
     // ── HL7 message log cleanup (runs once at startup + every 24 h) ──
@@ -264,6 +315,17 @@ async function start() {
       console.log(`🔐 HL7 Socket IPs: ${HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS.join(', ') : '⚠️  ALL (set HL7_MLLP_ALLOWED_IPS)'}`);
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // Print any startup warnings
+    if (startupWarnings.length > 0) {
+      console.log('┌──────────────────────────────────────────┐');
+      console.log('│          STARTUP WARNINGS                │');
+      console.log('├──────────────────────────────────────────┤');
+      for (const w of startupWarnings) {
+        console.log(`│ ${w}`);
+      }
+      console.log('└──────────────────────────────────────────┘\n');
+    }
     
     // Update graceful shutdown to include MLLP server
     process.removeAllListeners('SIGINT');

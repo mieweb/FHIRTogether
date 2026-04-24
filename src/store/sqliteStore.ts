@@ -32,6 +32,20 @@ function toNaiveISO(date: Date): string {
   return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
 }
 
+/**
+ * Bump this version whenever the schema changes.
+ * The store will compare it against the version stored in the database
+ * and report a mismatch so the server can warn or rebuild.
+ */
+export const SCHEMA_VERSION = 2;
+
+export interface SchemaStatus {
+  current: number;
+  expected: number;
+  match: boolean;
+  migrated: boolean;
+}
+
 export class SqliteStore implements FhirStore {
   private db: Database.Database;
   private dataDir: string;
@@ -53,7 +67,19 @@ export class SqliteStore implements FhirStore {
     this.db.pragma('journal_mode = WAL');
   }
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<SchemaStatus> {
+    // Meta table for tracking schema version
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS _meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+
+    // Read the stored schema version (0 = brand new database)
+    const row = this.db.prepare('SELECT value FROM _meta WHERE key = ?').get('schema_version') as { value: string } | undefined;
+    const dbVersion = row ? parseInt(row.value, 10) : 0;
+
     // Create tables
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS schedules (
@@ -118,7 +144,6 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_slots_status ON slots(status);
       CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments(start);
       CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
-      CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier);
 
       CREATE TABLE IF NOT EXISTS slot_holds (
         id TEXT PRIMARY KEY,
@@ -161,6 +186,19 @@ export class SqliteStore implements FhirStore {
 
     // Ensure identifier index exists (covers both fresh and migrated databases)
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier)');
+
+    // Stamp the schema version after all migrations succeed
+    const migrated = dbVersion !== SCHEMA_VERSION;
+    this.db.prepare(
+      'INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).run('schema_version', String(SCHEMA_VERSION));
+
+    return {
+      current: dbVersion,
+      expected: SCHEMA_VERSION,
+      match: dbVersion === SCHEMA_VERSION || dbVersion === 0, // 0 = fresh DB, always fine
+      migrated,
+    };
   }
 
   async close(): Promise<void> {

@@ -218,6 +218,6 @@ export interface FhirStore {
   cleanupHL7MessageLog(retentionDays: number): Promise<number>;
 
   // Utility
-  initialize(): Promise<void>;
+  initialize(): Promise<{ current: number; expected: number; match: boolean; migrated: boolean }>;
   close(): Promise<void>;
 }
