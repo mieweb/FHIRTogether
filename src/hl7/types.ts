@@ -34,6 +34,8 @@ export type HL7SegmentType =
   | 'AIG' // Appointment Information - General Resource
   | 'AIL' // Appointment Information - Location Resource
   | 'AIP' // Appointment Information - Personnel Resource
+  | 'STF' // Staff Identification
+  | 'PRA' // Practitioner Detail
   | 'MSA' // Message Acknowledgment
   | 'ERR'; // Error
 
@@ -317,6 +319,50 @@ export interface AIPSegment {
 }
 
 /**
+ * STF - Staff Identification Segment
+ */
+export interface STFSegment {
+  segmentType: 'STF';
+  primaryKeyValue?: string;            // STF-1
+  staffIdCode?: CX[];                  // STF-2
+  staffName?: XPN;                     // STF-3
+  staffType?: string[];                // STF-4
+  administrativeSex?: string;          // STF-5
+  dateOfBirth?: string;                // STF-6
+  activeInactiveFlag?: string;         // STF-7
+  department?: {                       // STF-8
+    identifier?: string;
+    text?: string;
+  };
+  hospitalService?: {                  // STF-9
+    identifier?: string;
+    text?: string;
+  };
+  phone?: XTN[];                       // STF-10
+  officeHomeAddress?: XAD[];           // STF-11
+}
+
+/**
+ * PRA - Practitioner Detail Segment
+ */
+export interface PRASegment {
+  segmentType: 'PRA';
+  primaryKeyValue?: string;            // PRA-1
+  practitionerGroup?: {                // PRA-2
+    identifier?: string;
+    text?: string;
+  };
+  practitionerCategory?: string[];     // PRA-3 (e.g., ['physician', 'surgeon'])
+  providerBilling?: string;            // PRA-4
+  specialty?: Array<{                  // PRA-5
+    identifier?: string;
+    text?: string;
+  }>;
+  practitionerId?: CX[];               // PRA-6
+  privileges?: string[];               // PRA-7
+}
+
+/**
  * MSA - Message Acknowledgment Segment
  */
 export interface MSASegment {
@@ -359,6 +405,8 @@ export type HL7Segment =
   | AIGSegment
   | AILSegment
   | AIPSegment
+  | STFSegment
+  | PRASegment
   | MSASegment
   | ERRSegment;
 
@@ -374,6 +422,8 @@ export interface SIUMessage {
   aig?: AIGSegment;
   ail?: AILSegment;
   aip?: AIPSegment;
+  stf?: STFSegment;
+  pra?: PRASegment;
 }
 
 /**

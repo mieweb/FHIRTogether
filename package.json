@@ -5,12 +5,18 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build --prefix packages/fhir-scheduler",
+    "build:server": "tsc",
     "start": "node dist/server.js",
     "generate-data": "tsx src/examples/generateBusyOffice.ts",
     "import-seed": "tsx src/examples/importSeedData.ts",
     "hl7-test": "tsx src/examples/testHL7.ts",
-    "test": "jest",
+    "test": "jest --forceExit && playwright test",
+    "test:unit": "jest --forceExit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:all": "jest --forceExit && playwright test && npm test --prefix packages/fhir-scheduler",
     "lint": "eslint src --ext .ts"
   },
   "keywords": [
@@ -34,6 +40,7 @@
     "pino-pretty": "^10.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.6",

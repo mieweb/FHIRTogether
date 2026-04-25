@@ -126,6 +126,7 @@ export interface FhirScheduleQuery {
   active?: boolean;
   date?: string;
   _count?: number;
+  system_id?: string;
 }
 
 export interface FhirAppointmentQuery {
@@ -134,6 +135,85 @@ export interface FhirAppointmentQuery {
   actor?: string;
   patient?: string;
   identifier?: string;
+  _count?: number;
+}
+
+// ==================== SYNAPSE MULTI-TENANT TYPES ====================
+
+/**
+ * System status progression:
+ *   HL7 path:  (first SIU) → unverified → [admin verifies] → active → [stops sending] → expired
+ *   REST path: register → pending → [TLS challenge] → active → [stops calling] → expired
+ */
+export type SystemStatus = 'unverified' | 'pending' | 'active' | 'expired';
+
+/**
+ * A registered system (EHR, clinic, hospital) in the synapse gateway.
+ * Systems are identified by MSH-4 (sending facility) in HL7, or by URL in REST.
+ */
+export interface SynapseSystem {
+  id: string;
+  name: string;
+  url?: string;
+  mshFacility?: string;
+  status: SystemStatus;
+  lastActivityAt: string;
+  createdAt: string;
+  ttlDays: number;
+}
+
+/**
+ * A physical location belonging to a system.
+ * Auto-created from AIL segments in HL7, or via REST API.
+ */
+export interface SynapseLocation {
+  id: string;
+  systemId: string;
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  phone?: string;
+  hl7LocationId?: string;
+  createdAt: string;
+}
+
+/**
+ * Returned when a new system is registered via REST API.
+ */
+export interface SystemRegistration {
+  systemId: string;
+  challengeToken: string;
+  challengeUrl: string;
+}
+
+/**
+ * Result of findOrCreateSystemByMSH — tells callers
+ * whether the system was just created and whether the secret matched.
+ */
+export interface MSHLookupResult {
+  system: SynapseSystem;
+  isNew: boolean;
+  secretMatch: boolean;
+  /** Raw API key — only present when a new key was generated (first contact). */
+  apiKey?: string;
+}
+
+/**
+ * Query parameters for system listing
+ */
+export interface SynapseSystemQuery {
+  status?: SystemStatus;
+  _count?: number;
+}
+
+/**
+ * Query parameters for location listing
+ */
+export interface SynapseLocationQuery {
+  systemId?: string;
+  zip?: string;
   _count?: number;
 }
 
@@ -181,6 +261,28 @@ export interface HL7MessageLogQuery {
  * Store Interface
  */
 export interface FhirStore {
+  // ==================== SYNAPSE SYSTEM OPERATIONS ====================
+  createSystem(system: Omit<SynapseSystem, 'id' | 'createdAt' | 'lastActivityAt'> & { apiKeyHash?: string; mshSecretHash?: string; challengeToken?: string }): Promise<SynapseSystem>;
+  findOrCreateSystemByMSH(facility: string, secret: string): Promise<MSHLookupResult>;
+  getSystemById(id: string): Promise<SynapseSystem | undefined>;
+  getSystemByUrl(url: string): Promise<SynapseSystem | undefined>;
+  getSystemByMshFacility(facility: string): Promise<SynapseSystem | undefined>;
+  getSystemByApiKeyHash(hash: string): Promise<SynapseSystem | undefined>;
+  getSystems(query?: SynapseSystemQuery): Promise<SynapseSystem[]>;
+  updateSystem(id: string, updates: Partial<Pick<SynapseSystem, 'name' | 'url' | 'status' | 'ttlDays'>> & { apiKeyHash?: string; challengeToken?: string }): Promise<SynapseSystem>;
+  updateSystemActivity(id: string): Promise<void>;
+  deleteSystem(id: string): Promise<void>;
+  getSystemChallengeToken(id: string): Promise<string | undefined>;
+  evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshFacility?: string }> }>;
+
+  // ==================== SYNAPSE LOCATION OPERATIONS ====================
+  createLocation(location: Omit<SynapseLocation, 'id' | 'createdAt'>): Promise<SynapseLocation>;
+  findOrCreateLocationByHL7(systemId: string, hl7LocationId: string, name: string, address?: string): Promise<SynapseLocation>;
+  getLocations(query?: SynapseLocationQuery): Promise<SynapseLocation[]>;
+  getLocationById(id: string): Promise<SynapseLocation | undefined>;
+  updateLocation(id: string, updates: Partial<Omit<SynapseLocation, 'id' | 'systemId' | 'createdAt'>>): Promise<SynapseLocation>;
+  deleteLocation(id: string): Promise<void>;
+
   // Slot operations
   getSlots(query: FhirSlotQuery): Promise<Slot[]>;
   getSlotById(id: string): Promise<Slot | null>;

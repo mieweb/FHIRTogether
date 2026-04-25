@@ -15,6 +15,31 @@
   margin: 0 auto;
 }
 
+/* Error banner */
+.fs-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.375rem;
+  color: #991b1b;
+  font-size: 0.875rem;
+}
+
+.fs-error-banner button {
+  background: none;
+  border: none;
+  color: #991b1b;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
 /* Demo tab navigation */
 .fs-demo-tabs {
   display: flex;
@@ -1407,6 +1432,62 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Slot summary & slot cards ── */
+
+.fs-slot-summary {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  margin-bottom: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.fs-slot-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.fs-slot-free  { background-color: #059669; }
+.fs-slot-busy  { background-color: #dc2626; }
+.fs-slot-blocked { background-color: #6b7280; }
+
+.fs-slot-card {
+  border-left: 3px solid #9ca3af;
+}
+
+.fs-slot-card-free {
+  background-color: #f0fdf4;
+  border-left-color: #059669;
+  border-color: #bbf7d0;
+}
+
+.fs-slot-card-busy {
+  background-color: #fef2f2;
+  border-left-color: #dc2626;
+  border-color: #fecaca;
+}
+
+.fs-slot-card-busy-unavailable {
+  background-color: #f3f4f6;
+  border-left-color: #6b7280;
+  border-color: #d1d5db;
+}
+
+.fs-slot-card-busy-tentative {
+  background-color: #fffbeb;
+  border-left-color: #d97706;
+  border-color: #fde68a;
+}
+
+.fs-slot-label {
+  font-style: italic;
 }
 
 /* Import Data Component */

@@ -21,6 +21,8 @@ import {
   AIGSegment,
   AILSegment,
   AIPSegment,
+  STFSegment,
+  PRASegment,
   MSASegment,
   ERRSegment,
   SIUMessage,
@@ -414,6 +416,148 @@ export function parseAIP(segment: string): AIPSegment {
 }
 
 /**
+ * Parse STF segment (Staff Identification)
+ */
+export function parseSTF(segment: string): STFSegment {
+  const fields = segment.split(HL7_FIELD_SEPARATOR);
+
+  // STF-2: Staff ID codes (repeating CX)
+  const staffIdCodes = fields[2]
+    ? fields[2].split(HL7_REPETITION_SEPARATOR).map(parseCXField)
+    : undefined;
+
+  // STF-3: Staff Name (XPN)
+  const nameField = fields[3] || '';
+  const nameParts = nameField.split(HL7_COMPONENT_SEPARATOR);
+
+  // STF-4: Staff Type (repeating)
+  const staffType = fields[4]
+    ? fields[4].split(HL7_REPETITION_SEPARATOR).filter(Boolean)
+    : undefined;
+
+  // STF-8: Department (CE)
+  const deptField = fields[8] || '';
+  const deptParts = deptField.split(HL7_COMPONENT_SEPARATOR);
+
+  // STF-9: Hospital Service (CE)
+  const svcField = fields[9] || '';
+  const svcParts = svcField.split(HL7_COMPONENT_SEPARATOR);
+
+  // STF-10: Phone (repeating XTN)
+  const phones = fields[10]
+    ? fields[10].split(HL7_REPETITION_SEPARATOR).map(parseXTNField)
+    : undefined;
+
+  // STF-11: Office/Home Address (repeating XAD)
+  const addresses = fields[11]
+    ? fields[11].split(HL7_REPETITION_SEPARATOR).map(parseXADField)
+    : undefined;
+
+  return {
+    segmentType: 'STF',
+    primaryKeyValue: fields[1] || undefined,
+    staffIdCode: staffIdCodes,
+    staffName: nameParts[0] ? {
+      familyName: nameParts[0] || undefined,
+      givenName: nameParts[1] || undefined,
+      middleInitialOrName: nameParts[2] || undefined,
+      suffix: nameParts[3] || undefined,
+      prefix: nameParts[4] || undefined,
+      degree: nameParts[5] || undefined,
+    } : undefined,
+    staffType,
+    administrativeSex: fields[5] || undefined,
+    dateOfBirth: fields[6] || undefined,
+    activeInactiveFlag: fields[7] || undefined,
+    department: deptParts[0] ? { identifier: deptParts[0], text: deptParts[1] || undefined } : undefined,
+    hospitalService: svcParts[0] ? { identifier: svcParts[0], text: svcParts[1] || undefined } : undefined,
+    phone: phones,
+    officeHomeAddress: addresses,
+  };
+}
+
+/**
+ * Parse PRA segment (Practitioner Detail)
+ */
+export function parsePRA(segment: string): PRASegment {
+  const fields = segment.split(HL7_FIELD_SEPARATOR);
+
+  // PRA-2: Practitioner Group (CE)
+  const groupField = fields[2] || '';
+  const groupParts = groupField.split(HL7_COMPONENT_SEPARATOR);
+
+  // PRA-3: Practitioner Category (repeating)
+  const categories = fields[3]
+    ? fields[3].split(HL7_REPETITION_SEPARATOR).filter(Boolean)
+    : undefined;
+
+  // PRA-5: Specialty (repeating CE)
+  const specialties = fields[5]
+    ? fields[5].split(HL7_REPETITION_SEPARATOR).map(s => {
+        const parts = s.split(HL7_COMPONENT_SEPARATOR);
+        return { identifier: parts[0] || undefined, text: parts[1] || undefined };
+      })
+    : undefined;
+
+  // PRA-6: Practitioner ID (repeating CX)
+  const practitionerIds = fields[6]
+    ? fields[6].split(HL7_REPETITION_SEPARATOR).map(parseCXField)
+    : undefined;
+
+  // PRA-7: Privileges (repeating)
+  const privileges = fields[7]
+    ? fields[7].split(HL7_REPETITION_SEPARATOR).filter(Boolean)
+    : undefined;
+
+  return {
+    segmentType: 'PRA',
+    primaryKeyValue: fields[1] || undefined,
+    practitionerGroup: groupParts[0] ? { identifier: groupParts[0], text: groupParts[1] || undefined } : undefined,
+    practitionerCategory: categories,
+    providerBilling: fields[4] || undefined,
+    specialty: specialties,
+    practitionerId: practitionerIds,
+    privileges,
+  };
+}
+
+/** Parse a single CX-encoded field string */
+function parseCXField(s: string): CX {
+  const parts = s.split(HL7_COMPONENT_SEPARATOR);
+  return {
+    idNumber: parts[0] || '',
+    checkDigit: parts[1] || undefined,
+    checkDigitScheme: parts[2] || undefined,
+    assigningAuthority: parts[3] || undefined,
+    identifierTypeCode: parts[4] || undefined,
+  };
+}
+
+/** Parse a single XTN-encoded field string */
+function parseXTNField(s: string): XTN {
+  const parts = s.split(HL7_COMPONENT_SEPARATOR);
+  return {
+    telephoneNumber: parts[0] || undefined,
+    telecommunicationUseCode: parts[1] || undefined,
+    telecommunicationEquipmentType: parts[2] || undefined,
+    emailAddress: parts[3] || undefined,
+  };
+}
+
+/** Parse a single XAD-encoded field string */
+function parseXADField(s: string): XAD {
+  const parts = s.split(HL7_COMPONENT_SEPARATOR);
+  return {
+    streetAddress: parts[0] || undefined,
+    otherDesignation: parts[1] || undefined,
+    city: parts[2] || undefined,
+    stateOrProvince: parts[3] || undefined,
+    zipOrPostalCode: parts[4] || undefined,
+    country: parts[5] || undefined,
+  };
+}
+
+/**
  * Parse MSA segment
  */
 export function parseMSA(segment: string): MSASegment {
@@ -468,6 +612,8 @@ export function parseSIUMessage(raw: string): SIUMessage {
   const aigSegment = parsed.segments.find(s => s.startsWith('AIG'));
   const ailSegment = parsed.segments.find(s => s.startsWith('AIL'));
   const aipSegment = parsed.segments.find(s => s.startsWith('AIP'));
+  const stfSegment = parsed.segments.find(s => s.startsWith('STF'));
+  const praSegment = parsed.segments.find(s => s.startsWith('PRA'));
 
   if (!mshSegment || !schSegment) {
     throw new Error('Invalid SIU message: MSH and SCH segments are required');
@@ -482,6 +628,8 @@ export function parseSIUMessage(raw: string): SIUMessage {
     aig: aigSegment ? parseAIG(aigSegment) : undefined,
     ail: ailSegment ? parseAIL(ailSegment) : undefined,
     aip: aipSegment ? parseAIP(aipSegment) : undefined,
+    stf: stfSegment ? parseSTF(stfSegment) : undefined,
+    pra: praSegment ? parsePRA(praSegment) : undefined,
   };
 }
 
