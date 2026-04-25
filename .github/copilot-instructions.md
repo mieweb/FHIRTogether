@@ -100,6 +100,12 @@ src/
 - **Preserve behavior**: Refactoring should not change external behavior
 - **Code reviews**: All refactoring should be reviewed for correctness
 
+### 🌐 Testing with MCP Browser
+- Use MCP browser in Playwright if available to test functionality
+- **Never close the browser** after running MCP browser commands unless explicitly asked
+- Let the user interact with the browser after navigation or testing
+- Only use `browser_close` when the user specifically requests it
+
 ### ⚰️ Dead Code Management
 - **Immediate removal**: Delete unused code immediately when identified
 - **Historical preservation**: Move significant dead code to `.attic/` directory with context
