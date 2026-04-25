@@ -75,8 +75,16 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: packages/fhir-scheduler
 
+      - name: Start backend server
+        run: node dist/server.js &
+
+      - name: Wait for backend
+        run: npx wait-on http://localhost:4010/health --timeout 30000
+
       - run: npm test
         working-directory: packages/fhir-scheduler
+        env:
+          CI_SERVER_STARTED: 'true'
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
