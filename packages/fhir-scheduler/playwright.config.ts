@@ -36,13 +36,14 @@ export default defineConfig({
 
   /* Start both servers before running tests */
   webServer: [
-    {
+    // In CI the backend is pre-started by the workflow
+    ...(!process.env.CI ? [{
       command: 'npm run dev',
       cwd: '../..',  // FHIRTogether root
       url: 'http://localhost:4010/health',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: true,
       timeout: 30000,
-    },
+    }] : []),
     {
       command: 'npm run dev',
       url: 'http://localhost:5174',
