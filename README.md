@@ -21,6 +21,36 @@ We have an Enterprise Health EHR and WebChart EHR sandbox environment available 
 https://masterdaily.dev.webchart.app/ - WebChart EHR Sandbox
 https://ehbhdemo.enterprise.health - Enterprise Health EHR Sandbox
 
+## 🔒 PHI/PII Policy — Trap Door Model
+
+FHIRTogether is **not a system of record** for patient data. It acts as a scheduling gateway that relays information between patients and providers. PHI/PII is handled with a **trap door** model:
+
+- **PHI goes in but doesn't come out.** Patient information (name, phone, email, date of birth, reason for visit) can be submitted when booking an appointment, but the API **never returns it** in subsequent responses.
+- **API responses are redacted.** All `GET /Appointment` and `GET /Appointment/:id` responses strip patient participant display names, comments (which may contain reason for visit), and contained resources (which may contain questionnaire responses with PHI).
+- **POST responses are also redacted.** Even the response to a booking request does not echo back patient information.
+- **The provider view shows blocked time, not patient identities.** The provider appointment view displays when time slots are booked, their status, and their type — but not who booked them.
+- **PHI in the database is transient.** Patient information is stored only long enough to be relayed to the receiving system (e.g., via HL7v2 SIU messages). It is not intended for long-term storage in FHIRTogether.
+
+> **In short:** You can enter patient information through the scheduler, but FHIRTogether will never show it back to you or anyone else through the API or UI. The source EHR/PM system remains the authoritative source for patient data.
+
+```mermaid
+flowchart LR
+  Patient[Patient enters PHI via Scheduler]
+  DB[(FHIRTogether DB — transient)]
+  EHR[Receiving EHR / PM System]
+  API[API Responses — PHI redacted]
+  PV[Provider View — blocked time only]
+
+  Patient -->|POST /Appointment| DB
+  DB -->|HL7v2 relay| EHR
+  DB -.->|GET /Appointment| API
+  DB -.->|provider-view| PV
+
+  style DB fill:#fef3c7,stroke:#f59e0b
+  style API fill:#dcfce7,stroke:#22c55e
+  style PV fill:#dcfce7,stroke:#22c55e
+```
+
 
 ---
 

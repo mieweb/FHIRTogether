@@ -186,6 +186,19 @@ src/
 
 ## FHIRTogether-Specific Guidelines
 
+### 🔒 PHI/PII — Trap Door Model
+FHIRTogether treats patient data as a **trap door**: PHI goes in via POST but is **never returned** via GET or displayed in the UI (except on the screen where it was entered).
+
+- **API redaction**: All Appointment responses (GET, POST, PUT) pass through `redactAppointmentPHI()` in `appointmentRoutes.ts`, which strips:
+  - Patient participant `actor.display` names
+  - `comment` field (may contain reason for visit)
+  - `contained` resources (may contain QuestionnaireResponse with PHI)
+- **Provider view**: Shows blocked time slots, statuses, and appointment types — never patient identities. `AppointmentList.tsx` shows "Blocked" for patient participants.
+- **Confirmation screen**: Shows appointment details (provider, date, time, confirmation number) but does NOT echo back patient name or reason.
+- **Booking form**: The only place PHI is visible is the form where the user enters it. This is the "entry screen" exception.
+- **Database**: PHI is stored transiently — only long enough to relay to the receiving system (e.g., via HL7v2). FHIRTogether is not a system of record for patient data.
+- **New code must not leak PHI**: When adding features that read Appointment data, never display or return patient names, comments, or contained resources. If you need to reference a patient participant, use the reference ID only.
+
 ### Store Implementation
 - All database backends must implement the `FhirStore` interface in `src/types/fhir.ts`
 - Use the SQLite store (`src/store/sqliteStore.ts`) as a reference implementation

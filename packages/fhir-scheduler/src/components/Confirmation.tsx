@@ -44,16 +44,6 @@ function getProviderName(schedule: Schedule): string {
   return firstActor?.display || firstActor?.reference?.split('/').pop() || 'Provider';
 }
 
-/**
- * Get patient name from appointment
- */
-function getPatientName(appointment: Appointment): string {
-  const participant = appointment.participant?.find(
-    (p) => p.actor?.display || p.actor?.reference?.includes('Patient')
-  );
-  return participant?.actor?.display || 'Patient';
-}
-
 export function Confirmation({ appointment, provider, onReset }: ConfirmationProps) {
   return (
     <div className="fs-confirmation">
@@ -85,10 +75,6 @@ export function Confirmation({ appointment, provider, onReset }: ConfirmationPro
             <dd className="fs-confirmation-number">{appointment.id}</dd>
           </div>
           <div className="fs-details-item">
-            <dt>Patient</dt>
-            <dd>{getPatientName(appointment)}</dd>
-          </div>
-          <div className="fs-details-item">
             <dt>Provider</dt>
             <dd>{getProviderName(provider)}</dd>
           </div>
@@ -100,12 +86,6 @@ export function Confirmation({ appointment, provider, onReset }: ConfirmationPro
             <dt>Duration</dt>
             <dd>{formatDuration(appointment.start, appointment.end)}</dd>
           </div>
-          {appointment.comment && (
-            <div className="fs-details-item">
-              <dt>Reason</dt>
-              <dd>{appointment.comment}</dd>
-            </div>
-          )}
         </dl>
       </div>
       

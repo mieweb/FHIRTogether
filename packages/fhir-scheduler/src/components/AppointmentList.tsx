@@ -92,13 +92,15 @@ function getWeekDates(date: Date): string[] {
 }
 
 /**
- * Get patient display name from appointment participants
+ * Get patient display name from appointment participants.
+ * PHI is redacted by the API — patient display names are stripped.
+ * The provider view shows blocked time, not patient identities.
  */
 function getPatientDisplay(appointment: Appointment): string {
   const patient = appointment.participant?.find(
     (p) => p.actor?.reference?.includes('Patient/')
   );
-  return patient?.actor?.display || 'Unknown patient';
+  return patient?.actor?.display || 'Blocked';
 }
 
 /**
@@ -441,7 +443,7 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
                   <article
                     key={appt.id}
                     className="fs-apptlist-card"
-                    aria-label={`Appointment with ${getPatientDisplay(appt)} at ${formatTime(appt.start!)}`}
+                    aria-label={`Appointment at ${formatTime(appt.start!)}`}
                   >
                     <div className="fs-apptlist-card-time">
                       <span className="fs-apptlist-time-start">{formatTime(appt.start!)}</span>
@@ -466,9 +468,6 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
                       )}
                       {getLocationDisplay(appt) && (
                         <p className="fs-apptlist-location">{getLocationDisplay(appt)}</p>
-                      )}
-                      {appt.comment && (
-                        <p className="fs-apptlist-reason">{appt.comment}</p>
                       )}
                     </div>
                   </article>

@@ -5,6 +5,39 @@ interface AppointmentParams {
   id: string;
 }
 
+/**
+ * Redact PHI/PII from an Appointment resource before returning it via the API.
+ *
+ * FHIRTogether treats PHI as a "trap door": patient information enters via POST
+ * (booking) but is never returned in GET responses. This prevents the scheduling
+ * gateway from becoming a source of PHI exposure.
+ *
+ * Redacted fields:
+ * - Patient participant display names (actor.display removed)
+ * - comment (may contain reason for visit)
+ * - contained resources (may contain QuestionnaireResponse with PHI)
+ */
+export function redactAppointmentPHI(appointment: Appointment): Appointment {
+  const redacted = { ...appointment };
+
+  if (redacted.participant) {
+    redacted.participant = redacted.participant.map(p => {
+      if (p.actor?.reference?.includes('Patient')) {
+        return {
+          ...p,
+          actor: { reference: p.actor.reference },
+        };
+      }
+      return p;
+    });
+  }
+
+  delete redacted.comment;
+  delete (redacted as Record<string, unknown>).contained;
+
+  return redacted;
+}
+
 export async function appointmentRoutes(fastify: FastifyInstance, store: FhirStore) {
   // GET /Appointment - Search for appointments
   fastify.get<{ Querystring: FhirAppointmentQuery }>(
@@ -40,7 +73,7 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
         total: appointments.length,
         entry: appointments.map(appointment => ({
           fullUrl: `${request.protocol}://${request.hostname}/Appointment/${appointment.id}`,
-          resource: appointment,
+          resource: redactAppointmentPHI(appointment),
         })),
       };
 
@@ -83,7 +116,7 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
         return reply.code(404).send({ error: 'Appointment not found' });
       }
 
-      return reply.send(appointment);
+      return reply.send(redactAppointmentPHI(appointment));
     }
   );
 
@@ -143,7 +176,7 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
     },
     async (request: FastifyRequest<{ Body: Appointment }>, reply: FastifyReply) => {
       const appointment = await store.createAppointment(request.body);
-      return reply.code(201).send(appointment);
+      return reply.code(201).send(redactAppointmentPHI(appointment));
     }
   );
 
@@ -179,7 +212,7 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
     },
     async (request: FastifyRequest<{ Params: AppointmentParams; Body: Partial<Appointment> }>, reply: FastifyReply) => {
       const appointment = await store.updateAppointment(request.params.id, request.body);
-      return reply.send(appointment);
+      return reply.send(redactAppointmentPHI(appointment));
     }
   );
 
