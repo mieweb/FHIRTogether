@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HL7 Message Tester — FHIRTogether</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/@mieweb/ui/dist/brands/bluehive.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--mieweb-background);
+      color: var(--mieweb-foreground);
+      line-height: 1.6;
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, var(--mieweb-primary-700) 0%, var(--mieweb-primary-500) 100%);
+      color: white;
+      padding: 2rem 1.5rem 1.5rem;
+      text-align: center;
+    }
+    .page-header h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.35rem; }
+    .page-header p  { font-size: 0.95rem; opacity: 0.9; margin: 0; }
+    .page-header a  { color: rgba(255,255,255,0.9); }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+
+    /* ── MSH config panel ── */
+    .msh-panel {
+      background: var(--mieweb-card);
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-lg);
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .msh-panel h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem; }
+    .msh-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+    .msh-field label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--mieweb-muted-foreground);
+      margin-bottom: 0.2rem;
+    }
+    .msh-field input {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      font-family: 'JetBrains Mono', var(--mieweb-font-mono);
+      font-size: 0.85rem;
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-sm);
+      background: var(--mieweb-background);
+      color: var(--mieweb-foreground);
+    }
+    .msh-field input:focus { outline: 2px solid var(--mieweb-primary-500); outline-offset: -1px; }
+    .msh-actions { margin-top: 0.75rem; display: flex; gap: 0.5rem; }
+
+    /* ── Message cards ── */
+    .msg-card {
+      background: var(--mieweb-card);
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-lg);
+      margin-bottom: 1.25rem;
+      overflow: hidden;
+    }
+    .msg-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--mieweb-border);
+      background: var(--mieweb-muted);
+    }
+    .msg-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .msg-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      letter-spacing: 0.03em;
+    }
+    .badge-s12 { background: #dcfce7; color: #166534; }
+    .badge-s14 { background: #dbeafe; color: #1e40af; }
+    .badge-s15 { background: #fee2e2; color: #991b1b; }
+    .badge-s26 { background: #fef3c7; color: #92400e; }
+
+    .msg-desc {
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+      color: var(--mieweb-muted-foreground);
+      border-bottom: 1px solid var(--mieweb-border);
+    }
+
+    .msg-body { padding: 0.75rem 1rem; }
+
+    .msg-textarea {
+      width: 100%;
+      min-height: 180px;
+      font-family: 'JetBrains Mono', var(--mieweb-font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      padding: 0.6rem;
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-sm);
+      background: var(--mieweb-background);
+      color: var(--mieweb-foreground);
+      resize: vertical;
+      tab-size: 2;
+    }
+    .msg-textarea:focus { outline: 2px solid var(--mieweb-primary-500); outline-offset: -1px; }
+
+    .msg-actions {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--mieweb-border);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid transparent;
+      border-radius: var(--mieweb-radius-sm);
+      cursor: pointer;
+      transition: background 0.15s, box-shadow 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--mieweb-primary-600);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--mieweb-primary-700); }
+    .btn-secondary {
+      background: var(--mieweb-muted);
+      color: var(--mieweb-foreground);
+      border-color: var(--mieweb-border);
+    }
+    .btn-secondary:hover:not(:disabled) { background: var(--mieweb-border); }
+    .btn-danger {
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+    .btn-danger:hover:not(:disabled) { background: #fecaca; }
+
+    /* ── Response area ── */
+    .msg-response {
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--mieweb-border);
+      display: none;
+    }
+    .msg-response.visible { display: block; }
+    .msg-response-label {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--mieweb-muted-foreground);
+      margin-bottom: 0.35rem;
+    }
+    .msg-response pre {
+      font-family: 'JetBrains Mono', var(--mieweb-font-mono);
+      font-size: 0.8rem;
+      padding: 0.6rem;
+      border-radius: var(--mieweb-radius-sm);
+      overflow-x: auto;
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .response-success { background: #dcfce7; color: #166534; }
+    .response-error   { background: #fee2e2; color: #991b1b; }
+    .response-info    { background: #dbeafe; color: #1e40af; }
+
+    /* ── Status indicator ── */
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 0.35rem;
+    }
+    .status-idle    { background: #9ca3af; }
+    .status-sending { background: #f59e0b; animation: pulse 0.8s infinite; }
+    .status-ok      { background: #22c55e; }
+    .status-fail    { background: #ef4444; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    .msg-links {
+      padding: 0.5rem 1rem 0.75rem;
+      border-top: 1px solid var(--mieweb-border);
+      display: none;
+      font-size: 0.85rem;
+    }
+    .msg-links.visible { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+    .msg-links a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: var(--mieweb-primary-600);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: var(--mieweb-radius-sm);
+      background: var(--mieweb-muted);
+      transition: background 0.15s;
+    }
+    .msg-links a:hover { background: var(--mieweb-border); text-decoration: none; }
+    .msg-links button {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: white;
+      font-weight: 600;
+      font-size: 0.82rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: var(--mieweb-radius-sm);
+      background: var(--mieweb-primary-600);
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .msg-links button:hover { background: var(--mieweb-primary-700); }
+
+    /* ── Slot builder panel ── */
+    .slot-builder {
+      padding: 1rem;
+      border-top: 1px solid var(--mieweb-border);
+      background: var(--mieweb-muted);
+      display: none;
+    }
+    .slot-builder.visible { display: block; }
+    .slot-builder h3 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem;
+    }
+    .slot-builder-desc {
+      font-size: 0.8rem;
+      color: var(--mieweb-muted-foreground);
+      margin: 0 0 0.75rem;
+    }
+    .slot-yaml {
+      width: 100%;
+      min-height: 130px;
+      font-family: 'JetBrains Mono', var(--mieweb-font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      padding: 0.6rem;
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-sm);
+      background: var(--mieweb-background);
+      color: var(--mieweb-foreground);
+      resize: vertical;
+      tab-size: 2;
+    }
+    .slot-yaml:focus { outline: 2px solid var(--mieweb-primary-500); outline-offset: -1px; }
+    .slot-actions { margin-top: 0.5rem; display: flex; gap: 0.5rem; align-items: center; }
+    .slot-result {
+      margin-top: 0.5rem;
+      font-family: 'JetBrains Mono', var(--mieweb-font-mono);
+      font-size: 0.78rem;
+      padding: 0.5rem;
+      border-radius: var(--mieweb-radius-sm);
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: none;
+    }
+    .slot-result.visible { display: block; }
+
+    .spacer { flex: 1; }
+
+    .page-footer {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--mieweb-muted-foreground);
+      font-size: 0.82rem;
+    }
+    .page-footer a { color: var(--mieweb-primary-600); text-decoration: none; }
+    .page-footer a:hover { text-decoration: underline; }
+
+    .sandbox-banner {
+      background: var(--mieweb-warning-100);
+      border-bottom: 2px solid var(--mieweb-warning-500);
+      color: var(--mieweb-warning-900);
+      text-align: center;
+      padding: 0.5rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    /* ── Guided Tour ── */
+    .tour-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 9998;
+      pointer-events: none;
+    }
+    .tour-overlay.visible { /* overlay stays pointer-events:none so users can interact with the page */ }
+
+    .tour-spotlight {
+      position: fixed;
+      z-index: 9998;
+      border-radius: var(--mieweb-radius-lg);
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+      transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+    }
+
+    .tour-popup {
+      position: fixed;
+      z-index: 9999;
+      width: 340px;
+      max-width: calc(100vw - 2rem);
+      background: var(--mieweb-card, #fff);
+      border: 1px solid var(--mieweb-border);
+      border-radius: var(--mieweb-radius-lg);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+      padding: 1.25rem;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      pointer-events: auto;
+    }
+    .tour-popup.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .tour-popup-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0 0 0.5rem;
+      color: var(--mieweb-foreground);
+    }
+    .tour-popup-body {
+      font-size: 0.88rem;
+      line-height: 1.55;
+      color: var(--mieweb-muted-foreground);
+      margin: 0 0 1rem;
+    }
+    .tour-action-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      margin-top: 0.4rem;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: var(--mieweb-radius-sm);
+      background: #dcfce7;
+      color: #166534;
+    }
+    .tour-action-hint::before { content: '👆'; }
+    .tour-finish-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .tour-finish-links a {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border-radius: var(--mieweb-radius-sm);
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .tour-link-primary {
+      background: var(--mieweb-primary-600);
+      color: white;
+    }
+    .tour-link-primary:hover { background: var(--mieweb-primary-700); }
+    .tour-link-secondary {
+      background: var(--mieweb-muted);
+      color: var(--mieweb-foreground);
+      border: 1px solid var(--mieweb-border);
+    }
+    .tour-link-secondary:hover { background: var(--mieweb-border); }
+    .tour-popup-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .tour-progress {
+      font-size: 0.78rem;
+      color: var(--mieweb-muted-foreground);
+      white-space: nowrap;
+    }
+    .tour-buttons {
+      display: flex;
+      gap: 0.4rem;
+    }
+    .tour-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.82rem;
+      font-weight: 600;
+      border: 1px solid transparent;
+      border-radius: var(--mieweb-radius-sm);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .tour-btn-skip {
+      background: transparent;
+      color: var(--mieweb-muted-foreground);
+      border-color: var(--mieweb-border);
+    }
+    .tour-btn-skip:hover { background: var(--mieweb-muted); }
+    .tour-btn-back {
+      background: var(--mieweb-muted);
+      color: var(--mieweb-foreground);
+      border-color: var(--mieweb-border);
+    }
+    .tour-btn-back:hover { background: var(--mieweb-border); }
+    .tour-btn-next {
+      background: var(--mieweb-primary-600);
+      color: white;
+    }
+    .tour-btn-next:hover { background: var(--mieweb-primary-700); }
+
+    .tour-start-btn {
+      position: fixed;
+      bottom: 1.25rem;
+      right: 1.25rem;
+      z-index: 9000;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: var(--mieweb-primary-600);
+      color: white;
+      font-size: 1.25rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, transform 0.15s;
+    }
+    .tour-start-btn:hover {
+      background: var(--mieweb-primary-700);
+      transform: scale(1.08);
+    }
+    .tour-start-btn:focus-visible {
+      outline: 2px solid var(--mieweb-primary-500);
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="sandbox-banner" role="alert">
+    ⚠️ SANDBOX — These are synthetic test messages. Do not enter real PHI.
+  </div>
+  <header class="page-header">
+    <h1>HL7v2 Message Tester</h1>
+    <p>Send example SIU scheduling messages to the FHIRTogether API. <a href="/docs">Swagger UI</a> · <a href="/">Home</a></p>
+    <button onclick="startTour()" style="margin-top:0.6rem; display:inline-flex; align-items:center; gap:0.4rem; padding:0.5rem 1.1rem; font-size:0.88rem; font-weight:600; border:2px solid rgba(255,255,255,0.5); border-radius:var(--mieweb-radius-sm); background:rgba(255,255,255,0.15); color:white; cursor:pointer; transition:background 0.15s, border-color 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.25)';this.style.borderColor='rgba(255,255,255,0.8)'" onmouseout="this.style.background='rgba(255,255,255,0.15)';this.style.borderColor='rgba(255,255,255,0.5)'" aria-label="Start guided tour">
+      🚀 Getting Started
+    </button>
+  </header>
+
+  <main class="container">
+    <!-- MSH Configuration -->
+    <section class="msh-panel" aria-label="MSH Configuration">
+      <h2>MSH Configuration</h2>
+      <p style="font-size:0.85rem; color:var(--mieweb-muted-foreground); margin: 0 0 0.75rem;">
+        Change these fields to simulate messages from different sending systems.
+        Updating these values rewrites the MSH segment in every message below.
+      </p>
+      <div class="msh-grid">
+        <div class="msh-field">
+          <label for="msh-sending-app">MSH-3: Sending Application</label>
+          <input type="text" id="msh-sending-app" value="LEGACY_EHR">
+        </div>
+        <div class="msh-field">
+          <label for="msh-sending-fac">MSH-4: Sending Facility</label>
+          <input type="text" id="msh-sending-fac" value="MAIN_HOSPITAL">
+        </div>
+        <div class="msh-field">
+          <label for="msh-receiving-app">MSH-5: Receiving Application</label>
+          <input type="text" id="msh-receiving-app" value="FHIRTOGETHER">
+        </div>
+        <div class="msh-field">
+          <label for="msh-receiving-fac">MSH-6: Receiving Facility</label>
+          <input type="text" id="msh-receiving-fac" value="SCHEDULING_GATEWAY">
+        </div>
+        <div class="msh-field">
+          <label for="msh-security">MSH-8: Security (shared secret)</label>
+          <input type="text" id="msh-security" value="" placeholder="(optional)">
+        </div>
+        <div class="msh-field">
+          <label for="msh-version">MSH-12: HL7 Version</label>
+          <input type="text" id="msh-version" value="2.3">
+        </div>
+      </div>
+
+      <h2 style="margin: 1.25rem 0 0.5rem;">Provider &amp; Location</h2>
+      <p style="font-size:0.85rem; color:var(--mieweb-muted-foreground); margin: 0 0 0.75rem;">
+        Select the default provider and location for generated messages. Each message can still be edited individually.
+      </p>
+      <div class="msh-grid">
+        <div class="msh-field">
+          <label for="cfg-provider">Provider</label>
+          <select id="cfg-provider" style="width:100%; padding:0.45rem 0.6rem; font-size:0.85rem; border:1px solid var(--mieweb-border); border-radius:var(--mieweb-radius-sm); background:var(--mieweb-background); color:var(--mieweb-foreground);">
+            <option value="1|Adams|Douglas|A|Family Medicine">Dr. Douglas Adams — Family Medicine</option>
+            <option value="2|Colfer|Eoin|D|Internal Medicine">Dr. Eoin Colfer — Internal Medicine</option>
+            <option value="3|Dent|Arthur||Pediatrics">Dr. Arthur Dent — Pediatrics</option>
+            <option value="4|Prefect|Ford||Cardiology">Dr. Ford Prefect — Cardiology</option>
+            <option value="5|Beeblebrox|Zaphod||Neurology">Dr. Zaphod Beeblebrox — Neurology</option>
+          </select>
+        </div>
+        <div class="msh-field">
+          <label for="cfg-location-id">Location ID (AIL)</label>
+          <input type="text" id="cfg-location-id" value="OFFICE">
+        </div>
+        <div class="msh-field">
+          <label for="cfg-location-name">Location Name</label>
+          <input type="text" id="cfg-location-name" value="Main Office">
+        </div>
+      </div>
+
+      <div class="msh-actions">
+        <button class="btn btn-primary" onclick="applyMSH()" aria-label="Apply MSH changes to all messages">
+          Apply to All Messages
+        </button>
+        <button class="btn btn-secondary" onclick="resetMSH()" aria-label="Reset MSH to defaults">
+          Reset Defaults
+        </button>
+      </div>
+    </section>
+
+    <!-- Message cards rendered by JS -->
+    <div id="message-cards"></div>
+
+    <!-- Batch actions -->
+    <section class="msh-panel" aria-label="Batch actions">
+      <h2>Batch Actions</h2>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="sendAll()" aria-label="Send all messages sequentially">
+          Send All Messages
+        </button>
+        <button class="btn btn-secondary" onclick="resetAll()" aria-label="Reset all messages to defaults">
+          Reset All to Defaults
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="page-footer">
+    <p>
+      <a href="/">FHIRTogether</a> · <a href="/docs">Swagger UI</a> · <a href="https://github.com/mieweb/FHIRTogether">GitHub</a>
+    </p>
+  </footer>
+
+  <!-- Guided tour relaunch button -->
+  <button class="tour-start-btn" id="tour-start-btn" onclick="startTour()"
+          aria-label="Start guided tour" title="Take the guided tour">?</button>
+
+<script>
+// ────────────────────────────────────────────────────────────
+// Example HL7v2 SIU Messages
+// ────────────────────────────────────────────────────────────
+
+function ts() {
+  const d = new Date();
+  return d.getFullYear().toString()
+    + String(d.getMonth()+1).padStart(2,'0')
+    + String(d.getDate()).padStart(2,'0')
+    + String(d.getHours()).padStart(2,'0')
+    + String(d.getMinutes()).padStart(2,'0')
+    + String(d.getSeconds()).padStart(2,'0');
+}
+
+function futureDate(daysAhead, hour, minute) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  d.setHours(hour, minute, 0, 0);
+  return d.getFullYear().toString()
+    + String(d.getMonth()+1).padStart(2,'0')
+    + String(d.getDate()).padStart(2,'0')
+    + String(d.getHours()).padStart(2,'0')
+    + String(d.getMinutes()).padStart(2,'0')
+    + String(d.getSeconds()).padStart(2,'0');
+}
+
+const EXAMPLES = [
+  {
+    id: 's12-new',
+    title: 'SIU^S12 — New Appointment',
+    badge: 'S12',
+    badgeClass: 'badge-s12',
+    description: 'Creates a new appointment. The system auto-registers via MSH-4 on first contact. Uses the selected provider and location.',
+    build() {
+      const now = ts();
+      const start = futureDate(3, 9, 0);
+      const end = futureDate(3, 9, 30);
+      return [
+        `MSH|^~\\&|${msh.sendingApp}|${msh.sendingFac}|${msh.receivingApp}|${msh.receivingFac}|${now}|${msh.security}|SIU^S12|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|10001^10001|10001^10001|||10001|OFFICE^Office visit|Annual checkup|OFFICE|30|m|^^30^${start}^${end}|||||||||||||BOOKED`,
+        `PID|1||42||Beeblebrox^Zaphod||19781012|M|||1 Heart of Gold Ave^^Fort Wayne^IN^46804||(260)555-1234`,
+        `PV1|1|O|${locRef()}||||${provRef()}|||${cfg.specialty}`,
+        `RGS|1|A`,
+        `AIG|1|A|${provRef()}|${cfg.specialty}`,
+        `AIL|1|A|${locRef()}||||${start}|30|m`,
+        `AIP|1|A|${provRef()}|${cfg.specialty}||${start}|30|m`,
+      ].join('\n');
+    },
+  },
+  {
+    id: 's12-newpatient',
+    title: 'SIU^S12 — New Patient Visit',
+    badge: 'S12',
+    badgeClass: 'badge-s12',
+    description: 'Books a new patient visit for Trillian. Uses the selected provider and location with a 45-minute slot.',
+    build() {
+      const now = ts();
+      const start = futureDate(5, 14, 0);
+      const end = futureDate(5, 14, 45);
+      return [
+        `MSH|^~\\&|${msh.sendingApp}|${msh.sendingFac}|${msh.receivingApp}|${msh.receivingFac}|${now}|${msh.security}|SIU^S12|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|10002^10002|10002^10002|||10002|NEWPT^New patient visit|Initial consultation|OFFICE|45|m|^^45^${start}^${end}|||||||||||||BOOKED`,
+        `PID|1||10002||Trillian^Tricia||19850522|F|||42 Galaxy Lane^^London^UK^SW1A 1AA||(555)234-5678`,
+        `PV1|1|O|${locRef()}||||${provRef()}|||${cfg.specialty}`,
+        `RGS|1|A`,
+        `AIG|1|A|${provRef()}|${cfg.specialty}`,
+        `AIL|1|A|${locRef()}||||${start}|45|m`,
+        `AIP|1|A|${provRef()}|${cfg.specialty}||${start}|45|m`,
+      ].join('\n');
+    },
+  },
+  {
+    id: 's12-peds',
+    title: 'SIU^S12 — Pediatrics Visit',
+    badge: 'S12',
+    badgeClass: 'badge-s12',
+    description: 'Books Android Marvin for a wellness check. Uses the selected provider and location with a 20-minute slot.',
+    build() {
+      const now = ts();
+      const start = futureDate(7, 10, 15);
+      const end = futureDate(7, 10, 35);
+      return [
+        `MSH|^~\\&|${msh.sendingApp}|${msh.sendingFac}|${msh.receivingApp}|${msh.receivingFac}|${now}|${msh.security}|SIU^S12|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|10003^10003|10003^10003|||10003|OFFICE^Office visit|Wellness check|OFFICE|20|m|^^20^${start}^${end}|||||||||||||BOOKED`,
+        `PID|1||10001||Marvin^Android||20100315|M|||99 Infinite Improbability Dr^^Magrathea^CA^90210||(555)123-4567`,
+        `PV1|1|O|${locRef()}||||${provRef()}|||${cfg.specialty}`,
+        `RGS|1|A`,
+        `AIG|1|A|${provRef()}|${cfg.specialty}`,
+        `AIL|1|A|${locRef()}||||${start}|20|m`,
+        `AIP|1|A|${provRef()}|${cfg.specialty}||${start}|20|m`,
+      ].join('\n');
+    },
+  },
+  {
+    id: 's14-modify',
+    title: 'SIU^S14 — Modify Appointment',
+    badge: 'S14',
+    badgeClass: 'badge-s14',
+    description: 'Reschedules appointment 10001 to a new time. Uses the selected provider and location.',
+    build() {
+      const now = ts();
+      const start = futureDate(4, 11, 0);
+      const end = futureDate(4, 11, 30);
+      return [
+        `MSH|^~\\&|${msh.sendingApp}|${msh.sendingFac}|${msh.receivingApp}|${msh.receivingFac}|${now}|${msh.security}|SIU^S14|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|10001^10001|10001^10001|||10001|OFFICE^Office visit|Rescheduled|OFFICE|30|m|^^30^${start}^${end}|||||||||||||BOOKED`,
+        `PID|1||42||Beeblebrox^Zaphod||19781012|M|||1 Heart of Gold Ave^^Fort Wayne^IN^46804||(260)555-1234`,
+        `PV1|1|O|${locRef()}||||${provRef()}|||${cfg.specialty}`,
+        `RGS|1|U`,
+        `AIG|1|U|${provRef()}|${cfg.specialty}`,
+        `AIL|1|U|${locRef()}||||${start}|30|m`,
+        `AIP|1|U|${provRef()}|${cfg.specialty}||${start}|30|m`,
+      ].join('\n');
+    },
+  },
+  {
+    id: 's15-cancel',
+    title: 'SIU^S15 — Cancel Appointment',
+    badge: 'S15',
+    badgeClass: 'badge-s15',
+    description: 'Cancels appointment 10001. Uses the selected provider and location.',
+    build() {
+      const now = ts();
+      const start = futureDate(3, 9, 0);
+      const end = futureDate(3, 9, 30);
+      return [
+        `MSH|^~\\&|${msh.sendingApp}|${msh.sendingFac}|${msh.receivingApp}|${msh.receivingFac}|${now}|${msh.security}|SIU^S15|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|10001^10001|10001^10001|||10001|OFFICE^Office visit|Patient cancelled|OFFICE|30|m|^^30^${start}^${end}|||||||||||||CANCELLED`,
+        `PID|1||42||Beeblebrox^Zaphod||19781012|M|||1 Heart of Gold Ave^^Fort Wayne^IN^46804||(260)555-1234`,
+        `PV1|1|O|${locRef()}||||${provRef()}|||${cfg.specialty}`,
+        `RGS|1|D`,
+        `AIG|1|D|${provRef()}|${cfg.specialty}`,
+        `AIL|1|D|${locRef()}||||${start}|30|m`,
+        `AIP|1|D|${provRef()}|${cfg.specialty}||${start}|30|m`,
+      ].join('\n');
+    },
+  },
+  {
+    id: 's12-different-system',
+    title: 'SIU^S12 — Different Sending System',
+    badge: 'S12',
+    badgeClass: 'badge-s12',
+    description: 'Demonstrates multi-tenant auto-registration. This message uses a DIFFERENT MSH-4 facility ("SATELLITE_CLINIC"), creating a separate system in the gateway. Change MSH-4 above to see both systems in the Directory.',
+    build() {
+      const now = ts();
+      const start = futureDate(2, 8, 30);
+      const end = futureDate(2, 9, 0);
+      return [
+        `MSH|^~\\&|CLINIC_EHR|SATELLITE_CLINIC|${msh.receivingApp}|${msh.receivingFac}|${now}||SIU^S12|MSG${Date.now()}|P|${msh.version}`,
+        `SCH|20001^20001|20001^20001|||20001|URGENT^Urgent care visit|Walk-in|URGENT|30|m|^^30^${start}^${end}|||||||||||||BOOKED`,
+        `PID|1||10003||Slartibartfast^Fjord||19600101|M|||1 Norway Fjord St^^Oslo^NW^00001||(555)345-6789`,
+        `PV1|1|O|URGENT^^^Urgent Care||||4^Prefect^Ford|||Cardiology`,
+        `RGS|1|A`,
+        `AIG|1|A|4^Prefect^Ford|Cardiology`,
+        `AIL|1|A|URGENT^^^Urgent Care||||${start}|30|m`,
+        `AIP|1|A|4^Prefect^Ford|Cardiology||${start}|30|m`,
+      ].join('\n');
+    },
+  },
+];
+
+// ────────────────────────────────────────────────────────────
+// State
+// ────────────────────────────────────────────────────────────
+
+const msh = {
+  sendingApp: 'LEGACY_EHR',
+  sendingFac: 'MAIN_HOSPITAL',
+  receivingApp: 'FHIRTOGETHER',
+  receivingFac: 'SCHEDULING_GATEWAY',
+  security: '',
+  version: '2.3',
+};
+
+const cfg = {
+  providerId: '1', familyName: 'Adams', givenName: 'Douglas', middleInit: 'A', specialty: 'Family Medicine',
+  locationId: 'OFFICE', locationName: 'Main Office',
+};
+
+/** Parse provider select value into cfg fields */
+function parseProviderSelect(val) {
+  const [id, family, given, mid, spec] = val.split('|');
+  cfg.providerId = id; cfg.familyName = family; cfg.givenName = given; cfg.middleInit = mid; cfg.specialty = spec;
+}
+
+/** Format provider for PV1/AIG/AIP: "id^Family^Given^Mid" */
+function provRef() {
+  return cfg.middleInit
+    ? `${cfg.providerId}^${cfg.familyName}^${cfg.givenName}^${cfg.middleInit}`
+    : `${cfg.providerId}^${cfg.familyName}^${cfg.givenName}`;
+}
+
+/** Format AIL location: "ID^^^Name" */
+function locRef() {
+  return `${cfg.locationId}^^^${cfg.locationName}`;
+}
+
+const MSH_DEFAULTS = { ...msh };
+const CFG_DEFAULTS = { ...cfg };
+
+// ────────────────────────────────────────────────────────────
+// Render
+// ────────────────────────────────────────────────────────────
+
+function renderCards() {
+  const container = document.getElementById('message-cards');
+  container.innerHTML = '';
+
+  EXAMPLES.forEach((ex) => {
+    const card = document.createElement('div');
+    card.className = 'msg-card';
+    card.id = `card-${ex.id}`;
+    card.innerHTML = `
+      <div class="msg-header">
+        <span class="msg-title">${ex.title}</span>
+        <span class="msg-badge ${ex.badgeClass}">${ex.badge}</span>
+      </div>
+      <div class="msg-desc">${ex.description}</div>
+      <div class="msg-body">
+        <textarea class="msg-textarea" id="ta-${ex.id}" spellcheck="false"
+                  aria-label="HL7 message for ${ex.title}">${ex.build()}</textarea>
+      </div>
+      <div class="msg-actions">
+        <button class="btn btn-primary" onclick="sendMessage('${ex.id}')" id="btn-${ex.id}">
+          <span class="status-dot status-idle" id="dot-${ex.id}"></span>
+          Send to API
+        </button>
+        <button class="btn btn-secondary" onclick="resetMessage('${ex.id}')">Reset</button>
+        <button class="btn btn-secondary" onclick="copyMessage('${ex.id}')" aria-label="Copy to clipboard">Copy</button>
+        <span class="spacer"></span>
+        <span style="font-size:0.78rem; color:var(--mieweb-muted-foreground);" id="status-${ex.id}"></span>
+      </div>
+      <div class="msg-response" id="resp-${ex.id}">
+        <div class="msg-response-label">Response</div>
+        <pre id="resp-pre-${ex.id}"></pre>
+      </div>
+      <div class="msg-links" id="links-${ex.id}"></div>
+      <div class="slot-builder" id="slots-${ex.id}">
+        <h3>📅 Generate Slots for <span class="slot-provider-name"></span></h3>
+        <p class="slot-builder-desc">
+          Define availability as YAML. Slots are created as <code>free</code> for the schedule returned above.
+        </p>
+        <textarea class="slot-yaml" id="slot-yaml-${ex.id}" spellcheck="false"
+                  aria-label="YAML slot definition for ${ex.title}"></textarea>
+        <div class="slot-actions">
+          <button class="btn btn-primary" onclick="createSlots('${ex.id}')" id="slot-btn-${ex.id}">
+            Create Slots
+          </button>
+          <span style="font-size:0.78rem; color:var(--mieweb-muted-foreground);" id="slot-status-${ex.id}"></span>
+        </div>
+        <pre class="slot-result" id="slot-result-${ex.id}"></pre>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// MSH helpers
+// ────────────────────────────────────────────────────────────
+
+function readMSHInputs() {
+  msh.sendingApp   = document.getElementById('msh-sending-app').value;
+  msh.sendingFac   = document.getElementById('msh-sending-fac').value;
+  msh.receivingApp = document.getElementById('msh-receiving-app').value;
+  msh.receivingFac = document.getElementById('msh-receiving-fac').value;
+  msh.security     = document.getElementById('msh-security').value;
+  msh.version      = document.getElementById('msh-version').value;
+  parseProviderSelect(document.getElementById('cfg-provider').value);
+  cfg.locationId   = document.getElementById('cfg-location-id').value;
+  cfg.locationName = document.getElementById('cfg-location-name').value;
+}
+
+function applyMSH() {
+  readMSHInputs();
+  // Rebuild all messages with updated MSH
+  EXAMPLES.forEach((ex) => {
+    const ta = document.getElementById(`ta-${ex.id}`);
+    if (ta) ta.value = ex.build();
+  });
+}
+
+function resetMSH() {
+  Object.assign(msh, MSH_DEFAULTS);
+  Object.assign(cfg, CFG_DEFAULTS);
+  document.getElementById('msh-sending-app').value   = msh.sendingApp;
+  document.getElementById('msh-sending-fac').value   = msh.sendingFac;
+  document.getElementById('msh-receiving-app').value  = msh.receivingApp;
+  document.getElementById('msh-receiving-fac').value  = msh.receivingFac;
+  document.getElementById('msh-security').value       = msh.security;
+  document.getElementById('msh-version').value        = msh.version;
+  document.getElementById('cfg-provider').value       = `${cfg.providerId}|${cfg.familyName}|${cfg.givenName}|${cfg.middleInit}|${cfg.specialty}`;
+  document.getElementById('cfg-location-id').value    = cfg.locationId;
+  document.getElementById('cfg-location-name').value  = cfg.locationName;
+  applyMSH();
+}
+
+// ────────────────────────────────────────────────────────────
+// Send / response
+// ────────────────────────────────────────────────────────────
+
+async function sendMessage(id) {
+  const ta    = document.getElementById(`ta-${id}`);
+  const dot   = document.getElementById(`dot-${id}`);
+  const btn   = document.getElementById(`btn-${id}`);
+  const label = document.getElementById(`status-${id}`);
+  const resp  = document.getElementById(`resp-${id}`);
+  const pre   = document.getElementById(`resp-pre-${id}`);
+
+  // Convert textarea newlines to \r for proper HL7 segment delimiters
+  const raw = ta.value.replace(/\r?\n/g, '\r');
+
+  dot.className  = 'status-dot status-sending';
+  btn.disabled   = true;
+  label.textContent = 'Sending…';
+  resp.classList.remove('visible');
+
+  const startTime = performance.now();
+
+  try {
+    const res = await fetch('/hl7/siu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'x-application/hl7-v2+er7' },
+      body: raw,
+    });
+
+    const elapsed = Math.round(performance.now() - startTime);
+    const body = await res.text();
+
+    if (res.ok) {
+      dot.className = 'status-dot status-ok';
+      label.textContent = `${res.status} OK · ${elapsed}ms`;
+      pre.className = body.includes('|AA|') ? 'response-success'
+                    : body.includes('|AR|') ? 'response-error'
+                    : 'response-info';
+    } else {
+      dot.className = 'status-dot status-fail';
+      label.textContent = `${res.status} ${res.statusText} · ${elapsed}ms`;
+      pre.className = 'response-error';
+    }
+
+    // Show response, convert \r to newlines for display
+    pre.textContent = body.replace(/\r/g, '\n');
+    resp.classList.add('visible');
+
+    // On success (AA), show deep links from response headers
+    const links = document.getElementById(`links-${id}`);
+    links.classList.remove('visible');
+    links.innerHTML = '';
+    if (res.ok && body.includes('|AA|')) {
+      const scheduleRef = res.headers.get('X-Schedule-Ref');
+      const actorDisplay = res.headers.get('X-Schedule-Actor');
+      const apiKey = res.headers.get('X-Api-Key');
+      // Extract appointment date from SCH-11 component 4 (start datetime)
+      let appointmentDate;
+      const schSeg = raw.split('\r').find(s => s.startsWith('SCH|'));
+      if (schSeg) {
+        const fields = schSeg.split('|');
+        // SCH-11 is field index 11 (SCH + 11 pipes); component 4 is the start datetime
+        const comp4 = (fields[11] || '').split('^')[3] || '';
+        if (/^\d{8}/.test(comp4)) {
+          appointmentDate = `${comp4.slice(0,4)}-${comp4.slice(4,6)}-${comp4.slice(6,8)}`;
+        }
+      }
+      if (scheduleRef) {
+        showDeepLinks(id, scheduleRef, actorDisplay, apiKey, appointmentDate);
+      }
+    }
+  } catch (err) {
+    dot.className = 'status-dot status-fail';
+    label.textContent = 'Network error';
+    pre.className = 'response-error';
+    pre.textContent = err.message;
+    resp.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function resetMessage(id) {
+  readMSHInputs();
+  const ex = EXAMPLES.find(e => e.id === id);
+  if (!ex) return;
+  document.getElementById(`ta-${id}`).value = ex.build();
+  document.getElementById(`dot-${id}`).className = 'status-dot status-idle';
+  document.getElementById(`status-${id}`).textContent = '';
+  document.getElementById(`resp-${id}`).classList.remove('visible');
+  document.getElementById(`links-${id}`).classList.remove('visible');
+  document.getElementById(`slots-${id}`).classList.remove('visible');
+}
+
+/**
+ * Show deep links in the response area using schedule info from response headers.
+ */
+function showDeepLinks(id, scheduleRef, actorDisplay, apiKey, appointmentDate) {
+  const links = document.getElementById(`links-${id}`);
+  const scheduleId = scheduleRef.replace('Schedule/', '');
+  const providerName = actorDisplay || `Schedule/${scheduleId}`;
+  const dateParam = appointmentDate ? `&date=${appointmentDate}` : '';
+
+  links.innerHTML = `
+    <span style="color:var(--mieweb-muted-foreground); font-size:0.78rem;">View:</span>
+    <a href="/demo#calendar/${scheduleId}" target="_blank" aria-label="Open scheduler for ${providerName}">
+      🗓️ Book with ${providerName}
+    </a>
+    <a href="/Schedule/${scheduleId}" target="_blank" aria-label="View Schedule resource">
+      📋 ${scheduleRef}
+    </a>
+    <a href="/Slot?schedule=${scheduleRef}&status=free" target="_blank" aria-label="View free slots">
+      🕐 Free Slots
+    </a>
+    <a href="/scheduler/provider-view.html?schedule=${scheduleId}${dateParam}" target="_blank" aria-label="Open provider view for ${providerName}">
+      👨‍⚕️ Provider View
+    </a>
+    <button onclick="toggleSlotBuilder('${id}')" aria-label="Generate availability slots">
+      📅 Generate Slots
+    </button>
+  `;
+  links.classList.add('visible');
+
+  // Pre-populate the slot builder with a YAML template
+  const builder = document.getElementById(`slots-${id}`);
+  builder.querySelector('.slot-provider-name').textContent = providerName;
+  builder.dataset.scheduleRef = scheduleRef;
+  builder.dataset.scheduleId = scheduleId;
+  if (apiKey) {
+    builder.dataset.apiKey = apiKey;
+  }
+
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const weekOut = new Date();
+  weekOut.setDate(weekOut.getDate() + 7);
+  const startDate = tomorrow.toISOString().slice(0, 10);
+  const endDate = weekOut.toISOString().slice(0, 10);
+
+  const yaml = document.getElementById(`slot-yaml-${id}`);
+  if (!yaml.value) {
+    yaml.value = [
+      `# Slot availability for ${providerName}`,
+      `# Schedule: ${scheduleRef}`,
+      ``,
+      `startDate: "${startDate}"`,
+      `endDate:   "${endDate}"`,
+      `weekdays:  [mon, tue, wed, thu, fri]`,
+      ``,
+      `blocks:`,
+      `  - start: "09:00"`,
+      `    end:   "12:00"`,
+      `    duration: 30    # minutes per slot`,
+      `  - start: "13:00"`,
+      `    end:   "17:00"`,
+      `    duration: 30`,
+    ].join('\n');
+  }
+}
+
+function copyMessage(id) {
+  const ta = document.getElementById(`ta-${id}`);
+  navigator.clipboard.writeText(ta.value).then(() => {
+    const label = document.getElementById(`status-${id}`);
+    label.textContent = 'Copied!';
+    setTimeout(() => { if (label.textContent === 'Copied!') label.textContent = ''; }, 1500);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
+// Slot builder
+// ────────────────────────────────────────────────────────────
+
+function toggleSlotBuilder(id) {
+  const builder = document.getElementById(`slots-${id}`);
+  builder.classList.toggle('visible');
+}
+
+/**
+ * Minimal YAML-ish parser for the slot definition format.
+ * Supports: key: "value", key: [a, b, c], nested blocks with - start/end/duration.
+ */
+function parseSlotYAML(text) {
+  const lines = text.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+  const result = { blocks: [] };
+  let inBlocks = false;
+  let currentBlock = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (trimmed === 'blocks:') { inBlocks = true; continue; }
+
+    if (inBlocks) {
+      if (trimmed.startsWith('- ')) {
+        if (currentBlock) result.blocks.push(currentBlock);
+        currentBlock = {};
+        const kv = trimmed.slice(2).trim();
+        const m = kv.match(/^(\w+):\s*"?([^"#]+)"?\s*/);
+        if (m) currentBlock[m[1]] = m[2].trim();
+      } else if (trimmed.match(/^\w+:/) && currentBlock) {
+        const m = trimmed.match(/^(\w+):\s*"?([^"#]+)"?\s*/);
+        if (m) currentBlock[m[1]] = m[2].trim();
+      } else if (!trimmed.startsWith(' ') && !trimmed.startsWith('-')) {
+        // End of blocks section
+        if (currentBlock) { result.blocks.push(currentBlock); currentBlock = null; }
+        inBlocks = false;
+      }
+    }
+
+    if (!inBlocks) {
+      // Top-level key-value
+      const kvMatch = trimmed.match(/^(\w+):\s*(.+)/);
+      if (kvMatch) {
+        const key = kvMatch[1];
+        let val = kvMatch[2].trim();
+        // Array syntax: [mon, tue, ...]
+        if (val.startsWith('[') && val.endsWith(']')) {
+          val = val.slice(1, -1).split(',').map(s => s.trim().toLowerCase());
+        } else {
+          val = val.replace(/^"(.*)"$/, '$1');
+        }
+        result[key] = val;
+      }
+    }
+  }
+  if (currentBlock) result.blocks.push(currentBlock);
+  return result;
+}
+
+/**
+ * Expand a parsed slot YAML definition into individual Slot resource bodies.
+ * Returns an array of { schedule, status, start, end } objects.
+ */
+function expandSlots(parsed, scheduleRef) {
+  const dayMap = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+  const weekdays = (parsed.weekdays || ['mon','tue','wed','thu','fri']).map(d => dayMap[d]);
+  const startDate = new Date(parsed.startDate + 'T00:00:00');
+  const endDate = new Date(parsed.endDate + 'T00:00:00');
+  const slots = [];
+
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    if (!weekdays.includes(d.getDay())) continue;
+    const dateStr = d.toISOString().slice(0, 10);
+
+    for (const block of parsed.blocks) {
+      const duration = parseInt(block.duration, 10) || 30;
+      const [startH, startM] = block.start.split(':').map(Number);
+      const [endH, endM] = block.end.split(':').map(Number);
+      const blockStartMin = startH * 60 + startM;
+      const blockEndMin = endH * 60 + endM;
+
+      for (let min = blockStartMin; min + duration <= blockEndMin; min += duration) {
+        const slotStart = `${dateStr}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00`;
+        const slotEnd = `${dateStr}T${String(Math.floor((min+duration)/60)).padStart(2,'0')}:${String((min+duration)%60).padStart(2,'0')}:00`;
+        slots.push({
+          resourceType: 'Slot',
+          schedule: { reference: scheduleRef },
+          status: 'free',
+          start: slotStart,
+          end: slotEnd,
+        });
+      }
+    }
+  }
+  return slots;
+}
+
+/**
+ * Parse YAML, expand into slots, POST each to /Slot, and display results.
+ */
+async function createSlots(id) {
+  const builder = document.getElementById(`slots-${id}`);
+  const scheduleRef = builder.dataset.scheduleRef;
+  const apiKey = builder.dataset.apiKey;
+  const yamlText = document.getElementById(`slot-yaml-${id}`).value;
+  const btn = document.getElementById(`slot-btn-${id}`);
+  const status = document.getElementById(`slot-status-${id}`);
+  const resultEl = document.getElementById(`slot-result-${id}`);
+
+  if (!scheduleRef) {
+    status.textContent = 'Error: no schedule reference';
+    return;
+  }
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  let parsed;
+  try {
+    parsed = parseSlotYAML(yamlText);
+  } catch (e) {
+    status.textContent = `Parse error: ${e.message}`;
+    return;
+  }
+
+  if (!parsed.startDate || !parsed.endDate || parsed.blocks.length === 0) {
+    status.textContent = 'Error: need startDate, endDate, and at least one block';
+    return;
+  }
+
+  const slots = expandSlots(parsed, scheduleRef);
+  if (slots.length === 0) {
+    status.textContent = 'No slots generated — check date range and weekdays';
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = `Creating ${slots.length} slots…`;
+  resultEl.classList.remove('visible');
+
+  let created = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (const slot of slots) {
+    try {
+      const res = await fetch('/Slot', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(slot),
+      });
+      if (res.ok) {
+        created++;
+      } else {
+        failed++;
+        const body = await res.text();
+        if (errors.length < 3) errors.push(`${res.status}: ${body}`);
+      }
+    } catch (e) {
+      failed++;
+      if (errors.length < 3) errors.push(e.message);
+    }
+    // Update progress every 10 slots
+    if ((created + failed) % 10 === 0) {
+      status.textContent = `Creating slots… ${created + failed}/${slots.length}`;
+    }
+  }
+
+  btn.disabled = false;
+
+  const summary = `✅ Created ${created} slots` + (failed ? ` · ❌ ${failed} failed` : '');
+  status.textContent = summary;
+
+  let detail = `${created} free slots for ${scheduleRef}\n`;
+  detail += `Date range: ${parsed.startDate} → ${parsed.endDate}\n`;
+  detail += `Blocks: ${parsed.blocks.map(b => `${b.start}–${b.end} (${b.duration}min)`).join(', ')}`;
+  if (errors.length) detail += `\n\nErrors:\n${errors.join('\n')}`;
+
+  resultEl.textContent = detail;
+  resultEl.className = 'slot-result visible ' + (failed ? 'response-error' : 'response-success');
+}
+
+async function sendAll() {
+  for (const ex of EXAMPLES) {
+    await sendMessage(ex.id);
+  }
+}
+
+function resetAll() {
+  resetMSH();
+  EXAMPLES.forEach(ex => resetMessage(ex.id));
+}
+
+// ── Init ──
+renderCards();
+
+// ────────────────────────────────────────────────────────────
+// Guided Tour
+// ────────────────────────────────────────────────────────────
+
+const TOUR_STEPS = [
+  {
+    target: '.page-header',
+    title: 'Welcome to the HL7 Tester',
+    body: 'This tool lets you send HL7v2 SIU scheduling messages to FHIRTogether and see the results in real time. Follow this tour to learn the workflow step by step.',
+    placement: 'bottom',
+  },
+  {
+    target: '.msh-panel',
+    title: 'Configure Your Sending System',
+    body: 'The MSH fields define your sending system\'s identity. FHIRTogether <strong>auto-registers</strong> new systems on first contact using MSH-4 (Sending Facility). Change these to simulate different source systems.',
+    placement: 'bottom',
+    actionHint: 'Try changing a field, or click Next',
+    waitFor: { event: 'input', selector: '.msh-panel input, .msh-panel select' },
+  },
+  {
+    target: '#cfg-provider',
+    title: 'Select a Provider',
+    body: 'Choose which provider the appointment is for. This updates the AIG, AIP, and PV1 segments in every message below.',
+    placement: 'bottom',
+    actionHint: 'Pick a provider, or click Next',
+    waitFor: { event: 'change', selector: '#cfg-provider' },
+  },
+  {
+    target: '.msh-actions',
+    title: 'Apply Your Settings',
+    body: 'Click <strong>"Apply to All Messages"</strong> to rewrite every message card with your MSH configuration and provider selection.',
+    placement: 'top',
+    actionHint: 'Click "Apply to All Messages"',
+    waitFor: { event: 'click', selector: '[aria-label="Apply MSH changes to all messages"]' },
+  },
+  {
+    target: '#card-s12-new',
+    title: 'Your First Message',
+    body: 'This is a pre-built <strong>SIU^S12</strong> (New Appointment) message. You can edit the raw HL7 text in the textarea, or just send it as-is to see it work.',
+    placement: 'top',
+  },
+  {
+    target: '#btn-s12-new',
+    title: 'Sending…',
+    body: 'The message is being sent to <code>/hl7/siu</code>. Watch the status dot — <strong>green</strong> means the ACK came back with <strong>AA</strong> (accepted).',
+    placement: 'top',
+    beforeShow() { document.getElementById('btn-s12-new').click(); },
+    waitForResult: { selector: '#dot-s12-new.status-ok', timeout: 10000 },
+  },
+  {
+    target: '#links-s12-new',
+    title: 'Deep Links',
+    body: 'Success! These links let you explore what was created. Let\'s generate some availability slots so patients can book. Click <strong>"Generate Slots"</strong>.',
+    placement: 'bottom',
+    actionHint: 'Click "📅 Generate Slots"',
+    waitFor: { event: 'click', selector: '#links-s12-new [aria-label="Generate availability slots"]' },
+    waitForElement: '#links-s12-new.visible',
+  },
+  {
+    target: '#slots-s12-new',
+    title: 'Generate Availability Slots',
+    body: 'This YAML template defines the provider\'s weekly schedule — morning and afternoon blocks. Click <strong>"Create Slots"</strong> to post them all.',
+    placement: 'top',
+    actionHint: 'Click "Create Slots"',
+    beforeShow() { document.getElementById('slots-s12-new').classList.add('visible'); },
+    waitFor: { event: 'click', selector: '#slot-btn-s12-new' },
+    waitForResult: { selector: '#slot-result-s12-new.visible', timeout: 30000 },
+  },
+  {
+    target: '#slot-result-s12-new',
+    title: 'Slots Created!',
+    body: 'Availability is live. Now explore the results:',
+    placement: 'top',
+    waitForElement: '#slot-result-s12-new.visible',
+    finishLinks: true,
+  },
+  {
+    target: '[aria-label="Batch actions"]',
+    title: 'Batch Actions',
+    body: 'Use <strong>"Send All Messages"</strong> to fire every example in sequence — great for quickly populating test data. You\'re all set! 🎉',
+    placement: 'top',
+  },
+];
+
+let tourOverlay = null;
+let tourSpotlight = null;
+let tourPopup = null;
+let tourStep = 0;
+let tourTarget = null;       // current step's DOM target
+let tourCleanupAction = null; // cleanup function for current step's action watcher
+
+function startTour() {
+  tourStep = 0;
+  // Remove existing tour DOM if present
+  endTourDOM();
+  // Create overlay
+  tourOverlay = document.createElement('div');
+  tourOverlay.className = 'tour-overlay';
+  tourOverlay.id = 'tour-overlay';
+  // Create spotlight
+  tourSpotlight = document.createElement('div');
+  tourSpotlight.className = 'tour-spotlight';
+  tourOverlay.appendChild(tourSpotlight);
+  // Create popup
+  tourPopup = document.createElement('div');
+  tourPopup.className = 'tour-popup';
+  tourPopup.id = 'tour-popup';
+  tourPopup.setAttribute('role', 'dialog');
+  tourPopup.setAttribute('aria-label', 'Guided tour');
+  document.body.appendChild(tourOverlay);
+  document.body.appendChild(tourPopup);
+
+  // Show overlay
+  requestAnimationFrame(() => {
+    tourOverlay.classList.add('visible');
+    showTourStep(tourStep);
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', tourKeyHandler);
+  // Track scroll so spotlight + popup follow the target
+  window.addEventListener('scroll', tourScrollHandler, { passive: true });
+}
+
+function tourKeyHandler(e) {
+  if (e.key === 'Escape') { endTour(); return; }
+  if (e.key === 'ArrowRight' || e.key === 'Enter') { nextTourStep(); e.preventDefault(); }
+  if (e.key === 'ArrowLeft') { prevTourStep(); e.preventDefault(); }
+}
+
+/** Lightweight reposition on scroll — no content rebuild, just move elements */
+function tourScrollHandler() {
+  if (!tourTarget || !tourSpotlight || !tourPopup) return;
+  repositionTourElements();
+}
+
+function repositionTourElements() {
+  if (!tourTarget || !tourSpotlight || !tourPopup) return;
+  const step = TOUR_STEPS[tourStep];
+  if (!step) return;
+  const rect = tourTarget.getBoundingClientRect();
+  const pad = 8;
+
+  // Spotlight (fixed positioning — just use viewport rect)
+  tourSpotlight.style.top = (rect.top - pad) + 'px';
+  tourSpotlight.style.left = (rect.left - pad) + 'px';
+  tourSpotlight.style.width = (rect.width + pad * 2) + 'px';
+  tourSpotlight.style.height = (rect.height + pad * 2) + 'px';
+
+  // Popup position
+  const popupWidth = 340;
+  const popupHeight = tourPopup.offsetHeight || 180;
+  const gap = 16;
+  let top, left;
+  let placement = step.placement || 'bottom';
+
+  if (placement === 'bottom') {
+    top = rect.bottom + gap;
+    left = rect.left + rect.width / 2 - popupWidth / 2;
+  } else {
+    top = rect.top - popupHeight - gap;
+    left = rect.left + rect.width / 2 - popupWidth / 2;
+  }
+
+  // Flip if off-screen
+  if (placement === 'bottom' && (rect.bottom + gap + popupHeight > window.innerHeight)) {
+    top = rect.top - popupHeight - gap;
+  } else if (placement === 'top' && (rect.top - gap - popupHeight < 0)) {
+    top = rect.bottom + gap;
+  }
+
+  // Clamp to viewport
+  left = Math.max(16, Math.min(left, window.innerWidth - popupWidth - 16));
+  top = Math.max(8, Math.min(top, window.innerHeight - popupHeight - 8));
+
+  tourPopup.style.top = top + 'px';
+  tourPopup.style.left = left + 'px';
+  tourPopup.style.width = popupWidth + 'px';
+}
+
+function showTourStep(index) {
+  if (!tourPopup || !tourOverlay) return;
+  // Clean up any action watcher from the previous step
+  cleanupActionWatcher();
+
+  const step = TOUR_STEPS[index];
+  if (!step) { endTour(); return; }
+
+  // Run beforeShow hook (e.g., open a panel)
+  if (step.beforeShow) step.beforeShow();
+
+  // If step needs a dynamic element, wait for it to appear
+  if (step.waitForElement) {
+    const el = document.querySelector(step.waitForElement);
+    if (!el) {
+      // Poll until the element appears (up to 15s)
+      const start = Date.now();
+      const poll = setInterval(() => {
+        const found = document.querySelector(step.waitForElement);
+        if (found || Date.now() - start > 15000) {
+          clearInterval(poll);
+          if (found) showTourStepReady(index);
+          else nextTourStep(); // skip if element never appeared
+        }
+      }, 200);
+      return;
+    }
+  }
+  showTourStepReady(index);
+}
+
+function showTourStepReady(index) {
+  const step = TOUR_STEPS[index];
+  const target = document.querySelector(step.target);
+  if (!target) { nextTourStep(); return; }
+  tourTarget = target;
+
+  // Scroll target into view (with padding)
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  // Wait for scroll to settle, then position
+  setTimeout(() => positionTour(target, step, index), 300);
+}
+
+function positionTour(target, step, index) {
+  const rect = target.getBoundingClientRect();
+  const pad = 8;
+
+  // Position spotlight (fixed — viewport-relative)
+  tourSpotlight.style.top = (rect.top - pad) + 'px';
+  tourSpotlight.style.left = (rect.left - pad) + 'px';
+  tourSpotlight.style.width = (rect.width + pad * 2) + 'px';
+  tourSpotlight.style.height = (rect.height + pad * 2) + 'px';
+
+  const isFirst = index === 0;
+  const isLast = index === TOUR_STEPS.length - 1;
+  const hint = step.actionHint
+    ? `<div class="tour-action-hint">${step.actionHint}</div>`
+    : '';
+
+  // Build finish links for the final "explore" step
+  let finishLinksHTML = '';
+  if (step.finishLinks) {
+    const builder = document.getElementById('slots-s12-new');
+    const scheduleId = builder?.dataset?.scheduleId || '';
+    const scheduleRef = builder?.dataset?.scheduleRef || '';
+    // Extract appointment date from the first message's SCH segment
+    let dateParam = '';
+    const ta = document.getElementById('ta-s12-new');
+    if (ta) {
+      const schLine = ta.value.split('\n').find(l => l.startsWith('SCH|'));
+      if (schLine) {
+        const comp4 = (schLine.split('|')[11] || '').split('^')[3] || '';
+        if (/^\d{8}/.test(comp4)) dateParam = `&date=${comp4.slice(0,4)}-${comp4.slice(4,6)}-${comp4.slice(6,8)}`;
+      }
+    }
+    finishLinksHTML = `<div class="tour-finish-links">
+      <a class="tour-link-primary" href="/scheduler/provider-view.html?schedule=${scheduleId}${dateParam}" target="_blank">👨‍⚕️ Provider View</a>
+      <a class="tour-link-primary" href="/demo#calendar/${scheduleId}" target="_blank">🗓️ Book an Appointment</a>
+      <a class="tour-link-secondary" href="/Slot?schedule=${scheduleRef}&status=free" target="_blank">🕐 Free Slots</a>
+      <a class="tour-link-secondary" href="/Schedule/${scheduleId}" target="_blank">📋 Schedule Resource</a>
+    </div>`;
+  }
+
+  tourPopup.innerHTML = `
+    <div class="tour-popup-title">${step.title}</div>
+    <div class="tour-popup-body">${step.body}${hint}${finishLinksHTML}</div>
+    <div class="tour-popup-footer">
+      <span class="tour-progress">${index + 1} of ${TOUR_STEPS.length}</span>
+      <div class="tour-buttons">
+        <button class="tour-btn tour-btn-skip" onclick="endTour()" aria-label="Skip tour">Skip</button>
+        ${isFirst ? '' : '<button class="tour-btn tour-btn-back" onclick="prevTourStep()" aria-label="Previous step">Back</button>'}
+        <button class="tour-btn tour-btn-next" onclick="nextTourStep()" aria-label="${isLast ? 'Finish tour' : 'Next step'}">
+          ${isLast ? 'Done' : 'Next →'}
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Hide popup briefly for reposition
+  tourPopup.classList.remove('visible');
+
+  // Position popup (fixed coords)
+  repositionTourElements();
+
+  // Reveal popup
+  requestAnimationFrame(() => {
+    tourPopup.classList.add('visible');
+    const nextBtn = tourPopup.querySelector('.tour-btn-next');
+    if (nextBtn) nextBtn.focus();
+  });
+
+  // Set up action watcher for this step (if defined)
+  setupActionWatcher(step);
+}
+
+/** Set up a DOM event listener that auto-advances when the user performs the step's action */
+function setupActionWatcher(step) {
+  // If step has waitForResult but no waitFor, start polling immediately
+  // (used when beforeShow auto-triggers the action)
+  if (!step.waitFor && step.waitForResult) {
+    const { selector: resultSel, timeout } = step.waitForResult;
+    const start = Date.now();
+    const poll = setInterval(() => {
+      if (document.querySelector(resultSel) || Date.now() - start > timeout) {
+        clearInterval(poll);
+        setTimeout(() => nextTourStep(), 500);
+      }
+    }, 200);
+    tourCleanupAction = () => clearInterval(poll);
+    return;
+  }
+
+  if (!step.waitFor) return;
+  const { event, selector } = step.waitFor;
+  const targets = document.querySelectorAll(selector);
+  if (!targets.length) return;
+
+  const handler = () => {
+    // If step has waitForResult, poll for the result element before advancing
+    if (step.waitForResult) {
+      const { selector: resultSel, timeout } = step.waitForResult;
+      const start = Date.now();
+      const poll = setInterval(() => {
+        if (document.querySelector(resultSel) || Date.now() - start > timeout) {
+          clearInterval(poll);
+          // Small delay so user can see the result
+          setTimeout(() => nextTourStep(), 500);
+        }
+      }, 200);
+    } else {
+      // Small delay so the action's own effect renders first
+      setTimeout(() => nextTourStep(), 400);
+    }
+    // Remove listeners after first trigger
+    cleanupActionWatcher();
+  };
+
+  // Store cleanup info
+  const cleanups = [];
+  targets.forEach(t => {
+    t.addEventListener(event, handler, { once: true });
+    cleanups.push(() => t.removeEventListener(event, handler));
+  });
+  tourCleanupAction = () => cleanups.forEach(fn => fn());
+}
+
+function cleanupActionWatcher() {
+  if (tourCleanupAction) {
+    tourCleanupAction();
+    tourCleanupAction = null;
+  }
+}
+
+function nextTourStep() {
+  cleanupActionWatcher();
+  tourStep++;
+  if (tourStep >= TOUR_STEPS.length) {
+    endTour();
+  } else {
+    showTourStep(tourStep);
+  }
+}
+
+function prevTourStep() {
+  cleanupActionWatcher();
+  if (tourStep > 0) {
+    tourStep--;
+    showTourStep(tourStep);
+  }
+}
+
+function endTour() {
+  cleanupActionWatcher();
+  localStorage.setItem('hl7-tour-dismissed', '1');
+  document.removeEventListener('keydown', tourKeyHandler);
+  window.removeEventListener('scroll', tourScrollHandler);
+  endTourDOM();
+}
+
+function endTourDOM() {
+  const overlay = document.getElementById('tour-overlay');
+  const popup = document.getElementById('tour-popup');
+  if (overlay) overlay.remove();
+  if (popup) popup.remove();
+  tourOverlay = null;
+  tourSpotlight = null;
+  tourPopup = null;
+  tourTarget = null;
+}
+
+// Reposition on resize
+window.addEventListener('resize', () => {
+  if (tourPopup && tourOverlay) {
+    repositionTourElements();
+  }
+});
+
+// Auto-start tour on first visit
+if (!localStorage.getItem('hl7-tour-dismissed')) {
+  setTimeout(startTour, 600);
+}
+</script>
+</body>
+</html>
