@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import {
@@ -7,6 +8,12 @@ import {
   Slot,
   Appointment,
   SlotHold,
+  SynapseSystem,
+  SynapseLocation,
+  SynapseSystemQuery,
+  SynapseLocationQuery,
+  MSHLookupResult,
+  SystemStatus,
   HL7MessageLogEntry,
   HL7MessageLogQuery,
   FhirSlotQuery,
@@ -37,7 +44,7 @@ function toNaiveISO(date: Date): string {
  * The store will compare it against the version stored in the database
  * and report a mismatch so the server can warn or rebuild.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface SchemaStatus {
   current: number;
@@ -176,6 +183,42 @@ export class SqliteStore implements FhirStore {
       CREATE INDEX IF NOT EXISTS idx_hl7_log_received ON hl7_message_log(received_at);
       CREATE INDEX IF NOT EXISTS idx_hl7_log_source ON hl7_message_log(source);
       CREATE INDEX IF NOT EXISTS idx_hl7_log_type ON hl7_message_log(message_type);
+
+      CREATE TABLE IF NOT EXISTS systems (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT,
+        api_key_hash TEXT,
+        msh_facility TEXT UNIQUE,
+        msh_secret_hash TEXT,
+        challenge_token TEXT,
+        status TEXT NOT NULL DEFAULT 'unverified',
+        last_activity_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        ttl_days INTEGER NOT NULL DEFAULT 7
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_systems_status ON systems(status);
+      CREATE INDEX IF NOT EXISTS idx_systems_url ON systems(url);
+      CREATE INDEX IF NOT EXISTS idx_systems_msh_facility ON systems(msh_facility);
+      CREATE INDEX IF NOT EXISTS idx_systems_api_key_hash ON systems(api_key_hash);
+
+      CREATE TABLE IF NOT EXISTS locations (
+        id TEXT PRIMARY KEY,
+        system_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        address TEXT,
+        city TEXT,
+        state TEXT,
+        zip TEXT,
+        phone TEXT,
+        hl7_location_id TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (system_id) REFERENCES systems(id) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_locations_system ON locations(system_id);
+      CREATE INDEX IF NOT EXISTS idx_locations_hl7 ON locations(system_id, hl7_location_id);
     `);
 
     // Migration: add identifier column if missing (existing databases)
@@ -186,6 +229,28 @@ export class SqliteStore implements FhirStore {
 
     // Ensure identifier index exists (covers both fresh and migrated databases)
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier)');
+
+    // Migration v2→v3: add system_id and location_id to schedules
+    const scheduleCols = this.db.pragma('table_info(schedules)') as { name: string }[];
+    if (!scheduleCols.some(c => c.name === 'system_id')) {
+      this.db.exec('ALTER TABLE schedules ADD COLUMN system_id TEXT REFERENCES systems(id) ON DELETE CASCADE');
+      this.db.exec('ALTER TABLE schedules ADD COLUMN location_id TEXT REFERENCES locations(id) ON DELETE SET NULL');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_schedules_system ON schedules(system_id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_schedules_location ON schedules(location_id)');
+
+      // If there are existing schedules, create a "legacy" system and assign them
+      const existingCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM schedules').get() as { cnt: number }).cnt;
+      if (existingCount > 0) {
+        const now = toNaiveISO(new Date());
+        const legacyId = `legacy-${Date.now()}`;
+        this.db.prepare(`
+          INSERT INTO systems (id, name, status, last_activity_at, created_at, ttl_days)
+          VALUES (?, ?, 'active', ?, ?, 9999)
+        `).run(legacyId, 'Legacy System', now, now);
+        this.db.prepare('UPDATE schedules SET system_id = ? WHERE system_id IS NULL').run(legacyId);
+        console.log(`\n🔄 Migration v2→v3: Created "Legacy System" (${legacyId}) for ${existingCount} existing schedules\n`);
+      }
+    }
 
     // Stamp the schema version after all migrations succeed
     const migrated = dbVersion !== SCHEMA_VERSION;
@@ -254,17 +319,292 @@ export class SqliteStore implements FhirStore {
     return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   }
 
+  // ==================== SYNAPSE SYSTEM OPERATIONS ====================
+
+  async createSystem(system: Omit<SynapseSystem, 'id' | 'createdAt' | 'lastActivityAt'> & { apiKeyHash?: string; mshSecretHash?: string; challengeToken?: string }): Promise<SynapseSystem> {
+    const id = this.generateId();
+    const now = toNaiveISO(new Date());
+
+    this.db.prepare(`
+      INSERT INTO systems (id, name, url, api_key_hash, msh_facility, msh_secret_hash, challenge_token, status, last_activity_at, created_at, ttl_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      system.name,
+      system.url || null,
+      system.apiKeyHash || null,
+      system.mshFacility || null,
+      system.mshSecretHash || null,
+      system.challengeToken || null,
+      system.status,
+      now,
+      now,
+      system.ttlDays,
+    );
+
+    return { id, name: system.name, url: system.url, mshFacility: system.mshFacility, status: system.status, lastActivityAt: now, createdAt: now, ttlDays: system.ttlDays };
+  }
+
+  async findOrCreateSystemByMSH(facility: string, secret: string): Promise<MSHLookupResult> {
+    const existing = await this.getSystemByMshFacility(facility);
+
+    if (existing) {
+      // Verify secret matches
+      const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+      const row = this.db.prepare('SELECT msh_secret_hash FROM systems WHERE id = ?').get(existing.id) as { msh_secret_hash: string } | undefined;
+      const storedHash = row?.msh_secret_hash;
+
+      if (!storedHash) {
+        // First time setting a secret for this system (e.g., legacy system)
+        this.db.prepare('UPDATE systems SET msh_secret_hash = ? WHERE id = ?').run(secretHash, existing.id);
+        await this.updateSystemActivity(existing.id);
+        // Issue a fresh API key on every successful HL7 auth (MSH-8 verified)
+        const apiKey = this.issueApiKey(existing.id);
+        return { system: existing, isNew: false, secretMatch: true, apiKey };
+      }
+
+      const match = crypto.timingSafeEqual(Buffer.from(secretHash), Buffer.from(storedHash));
+      if (match) {
+        await this.updateSystemActivity(existing.id);
+        // Issue a fresh API key on every successful HL7 auth (MSH-8 verified)
+        const apiKey = this.issueApiKey(existing.id);
+        return { system: existing, isNew: false, secretMatch: match, apiKey };
+      }
+      return { system: existing, isNew: false, secretMatch: match };
+    }
+
+    // Create new system — generate API key at creation time
+    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
+    const apiKey = crypto.randomBytes(32).toString('hex');
+    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const defaultTtl = parseInt(process.env.SYSTEM_TTL_DAYS || '7', 10);
+    const system = await this.createSystem({
+      name: facility,
+      status: 'unverified' as SystemStatus,
+      ttlDays: defaultTtl,
+      mshFacility: facility,
+      mshSecretHash: secretHash,
+      apiKeyHash,
+    });
+
+    return { system, isNew: true, secretMatch: true, apiKey };
+  }
+
+  /**
+   * Generate a new API key for a system and store the hash.
+   * Returns the raw key (only time it's available in plaintext).
+   */
+  private issueApiKey(systemId: string): string {
+    const apiKey = crypto.randomBytes(32).toString('hex');
+    const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    this.db.prepare('UPDATE systems SET api_key_hash = ? WHERE id = ?').run(hash, systemId);
+    return apiKey;
+  }
+
+  async getSystemById(id: string): Promise<SynapseSystem | undefined> {
+    const row = this.db.prepare('SELECT * FROM systems WHERE id = ?').get(id) as any;
+    return row ? this.rowToSystem(row) : undefined;
+  }
+
+  async getSystemByUrl(url: string): Promise<SynapseSystem | undefined> {
+    const row = this.db.prepare('SELECT * FROM systems WHERE url = ?').get(url) as any;
+    return row ? this.rowToSystem(row) : undefined;
+  }
+
+  async getSystemByMshFacility(facility: string): Promise<SynapseSystem | undefined> {
+    const row = this.db.prepare('SELECT * FROM systems WHERE msh_facility = ?').get(facility) as any;
+    return row ? this.rowToSystem(row) : undefined;
+  }
+
+  async getSystemByApiKeyHash(hash: string): Promise<SynapseSystem | undefined> {
+    const row = this.db.prepare('SELECT * FROM systems WHERE api_key_hash = ?').get(hash) as any;
+    return row ? this.rowToSystem(row) : undefined;
+  }
+
+  async getSystems(query?: SynapseSystemQuery): Promise<SynapseSystem[]> {
+    let sql = 'SELECT * FROM systems WHERE 1=1';
+    const params: any[] = [];
+
+    if (query?.status) {
+      sql += ' AND status = ?';
+      params.push(query.status);
+    }
+
+    sql += ' ORDER BY name ASC';
+
+    if (query?._count) {
+      sql += ' LIMIT ?';
+      params.push(query._count);
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map(row => this.rowToSystem(row));
+  }
+
+  async updateSystem(id: string, updates: Partial<Pick<SynapseSystem, 'name' | 'url' | 'status' | 'ttlDays'>> & { apiKeyHash?: string; challengeToken?: string }): Promise<SynapseSystem> {
+    const existing = await this.getSystemById(id);
+    if (!existing) throw new Error(`System ${id} not found`);
+
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
+    if (updates.url !== undefined) { setClauses.push('url = ?'); params.push(updates.url); }
+    if (updates.status !== undefined) { setClauses.push('status = ?'); params.push(updates.status); }
+    if (updates.ttlDays !== undefined) { setClauses.push('ttl_days = ?'); params.push(updates.ttlDays); }
+    if (updates.apiKeyHash !== undefined) { setClauses.push('api_key_hash = ?'); params.push(updates.apiKeyHash); }
+    if (updates.challengeToken !== undefined) { setClauses.push('challenge_token = ?'); params.push(updates.challengeToken); }
+
+    if (setClauses.length === 0) return existing;
+
+    params.push(id);
+    this.db.prepare(`UPDATE systems SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+
+    return (await this.getSystemById(id))!;
+  }
+
+  async updateSystemActivity(id: string): Promise<void> {
+    const now = toNaiveISO(new Date());
+    this.db.prepare('UPDATE systems SET last_activity_at = ? WHERE id = ?').run(now, id);
+  }
+
+  async deleteSystem(id: string): Promise<void> {
+    this.db.prepare('DELETE FROM systems WHERE id = ?').run(id);
+  }
+
+  async getSystemChallengeToken(id: string): Promise<string | undefined> {
+    const row = this.db.prepare('SELECT challenge_token FROM systems WHERE id = ?').get(id) as { challenge_token: string | null } | undefined;
+    return row?.challenge_token || undefined;
+  }
+
+  async evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshFacility?: string }> }> {
+    // Find expired systems: last_activity_at + ttl_days < now
+    const rows = this.db.prepare(`
+      SELECT id, name, msh_facility FROM systems
+      WHERE status != 'expired'
+        AND datetime(last_activity_at, '+' || ttl_days || ' days') < datetime('now', 'localtime')
+    `).all() as Array<{ id: string; name: string; msh_facility: string | null }>;
+
+    for (const row of rows) {
+      // Cascade delete handles locations → schedules → slots → appointments
+      this.db.prepare('DELETE FROM systems WHERE id = ?').run(row.id);
+    }
+
+    return {
+      count: rows.length,
+      systems: rows.map(r => ({ id: r.id, name: r.name, mshFacility: r.msh_facility || undefined })),
+    };
+  }
+
+  // ==================== SYNAPSE LOCATION OPERATIONS ====================
+
+  async createLocation(location: Omit<SynapseLocation, 'id' | 'createdAt'>): Promise<SynapseLocation> {
+    const id = this.generateId();
+    const now = toNaiveISO(new Date());
+
+    this.db.prepare(`
+      INSERT INTO locations (id, system_id, name, address, city, state, zip, phone, hl7_location_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      location.systemId,
+      location.name,
+      location.address || null,
+      location.city || null,
+      location.state || null,
+      location.zip || null,
+      location.phone || null,
+      location.hl7LocationId || null,
+      now,
+    );
+
+    return { ...location, id, createdAt: now };
+  }
+
+  async findOrCreateLocationByHL7(systemId: string, hl7LocationId: string, name: string, address?: string): Promise<SynapseLocation> {
+    // Look up by system + HL7 location ID
+    const existing = this.db.prepare(
+      'SELECT * FROM locations WHERE system_id = ? AND hl7_location_id = ?'
+    ).get(systemId, hl7LocationId) as any;
+
+    if (existing) return this.rowToLocation(existing);
+
+    return this.createLocation({
+      systemId,
+      name,
+      hl7LocationId,
+      address,
+    });
+  }
+
+  async getLocations(query?: SynapseLocationQuery): Promise<SynapseLocation[]> {
+    let sql = 'SELECT * FROM locations WHERE 1=1';
+    const params: any[] = [];
+
+    if (query?.systemId) {
+      sql += ' AND system_id = ?';
+      params.push(query.systemId);
+    }
+
+    if (query?.zip) {
+      sql += ' AND zip = ?';
+      params.push(query.zip);
+    }
+
+    sql += ' ORDER BY name ASC';
+
+    if (query?._count) {
+      sql += ' LIMIT ?';
+      params.push(query._count);
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map(row => this.rowToLocation(row));
+  }
+
+  async getLocationById(id: string): Promise<SynapseLocation | undefined> {
+    const row = this.db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as any;
+    return row ? this.rowToLocation(row) : undefined;
+  }
+
+  async updateLocation(id: string, updates: Partial<Omit<SynapseLocation, 'id' | 'systemId' | 'createdAt'>>): Promise<SynapseLocation> {
+    const existing = await this.getLocationById(id);
+    if (!existing) throw new Error(`Location ${id} not found`);
+
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
+    if (updates.address !== undefined) { setClauses.push('address = ?'); params.push(updates.address); }
+    if (updates.city !== undefined) { setClauses.push('city = ?'); params.push(updates.city); }
+    if (updates.state !== undefined) { setClauses.push('state = ?'); params.push(updates.state); }
+    if (updates.zip !== undefined) { setClauses.push('zip = ?'); params.push(updates.zip); }
+    if (updates.phone !== undefined) { setClauses.push('phone = ?'); params.push(updates.phone); }
+
+    if (setClauses.length === 0) return existing;
+
+    params.push(id);
+    this.db.prepare(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+
+    return (await this.getLocationById(id))!;
+  }
+
+  async deleteLocation(id: string): Promise<void> {
+    this.db.prepare('DELETE FROM locations WHERE id = ?').run(id);
+  }
+
   // ==================== SCHEDULE OPERATIONS ====================
 
-  async createSchedule(schedule: Schedule): Promise<Schedule> {
+  async createSchedule(schedule: Schedule & { system_id?: string; location_id?: string }): Promise<Schedule> {
     const id = schedule.id || this.generateId();
     const now = toNaiveISO(new Date());
 
     const stmt = this.db.prepare(`
       INSERT INTO schedules (
         id, active, service_category, service_type, specialty, actor,
-        planning_horizon_start, planning_horizon_end, comment, meta_last_updated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        planning_horizon_start, planning_horizon_end, comment, meta_last_updated,
+        system_id, location_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -277,13 +617,15 @@ export class SqliteStore implements FhirStore {
       schedule.planningHorizon?.start,
       schedule.planningHorizon?.end,
       schedule.comment,
-      now
+      now,
+      schedule.system_id || null,
+      schedule.location_id || null,
     );
 
     return { ...schedule, id, meta: { lastUpdated: now } };
   }
 
-  async getSchedules(query: FhirScheduleQuery): Promise<Schedule[]> {
+  async getSchedules(query: FhirScheduleQuery & { system_id?: string }): Promise<Schedule[]> {
     let sql = 'SELECT * FROM schedules WHERE 1=1';
     const params: any[] = [];
 
@@ -300,6 +642,11 @@ export class SqliteStore implements FhirStore {
     if (query.date) {
       sql += ' AND (planning_horizon_start <= ? AND planning_horizon_end >= ?)';
       params.push(query.date, query.date);
+    }
+
+    if (query.system_id) {
+      sql += ' AND system_id = ?';
+      params.push(query.system_id);
     }
 
     if (query._count) {
@@ -939,6 +1286,34 @@ export class SqliteStore implements FhirStore {
       ackResponse: row.ack_response || undefined,
       ackCode: row.ack_code || undefined,
       processingMs: row.processing_ms ?? undefined,
+    };
+  }
+
+  private rowToSystem(row: any): SynapseSystem {
+    return {
+      id: row.id,
+      name: row.name,
+      url: row.url || undefined,
+      mshFacility: row.msh_facility || undefined,
+      status: row.status as SystemStatus,
+      lastActivityAt: row.last_activity_at,
+      createdAt: row.created_at,
+      ttlDays: row.ttl_days,
+    };
+  }
+
+  private rowToLocation(row: any): SynapseLocation {
+    return {
+      id: row.id,
+      systemId: row.system_id,
+      name: row.name,
+      address: row.address || undefined,
+      city: row.city || undefined,
+      state: row.state || undefined,
+      zip: row.zip || undefined,
+      phone: row.phone || undefined,
+      hl7LocationId: row.hl7_location_id || undefined,
+      createdAt: row.created_at,
     };
   }
 

@@ -189,6 +189,15 @@ export function SchedulerWidget({
   
   return (
     <div className={`fs-scheduler-widget ${className}`}>
+      {error && (
+        <div className="fs-error-banner" role="alert">
+          <span>{error}</span>
+          <button
+            onClick={() => useSchedulerStore.getState().clearError()}
+            aria-label="Dismiss error"
+          >×</button>
+        </div>
+      )}
       {step === 'visit-type' && <ConnectedVisitTypeSelector />}
       {step === 'questionnaire' && (
         <ConnectedIntakeQuestionnaire questionnaireFormData={questionnaireFormData} />

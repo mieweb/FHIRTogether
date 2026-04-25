@@ -2,55 +2,173 @@
 
 ## System Overview
 
+```mermaid
+graph TB
+  subgraph Clients["Client Applications"]
+    WebApps["Web Apps / Mobile"]
+    EHR["Legacy EHR Systems"]
+    NewHL7["New System — HL7"]
+    NewREST["New System — REST"]
+  end
+
+  subgraph Gateway["Fastify HTTP Server"]
+    Swagger["Swagger UI /docs"]
+    Auth["API Key Auth + Basic Auth fallback"]
+    subgraph Routes["Routes Layer"]
+      SystemR["/System routes"]
+      LocationR["/Location routes"]
+      DirectoryR["/Directory — public"]
+      ScheduleR["/Schedule routes"]
+      SlotR["/Slot routes"]
+      ApptR["/Appointment routes"]
+      HL7R["/hl7/siu + MLLP socket"]
+    end
+    Evaporation["Evaporation Timer"]
+  end
+
+  subgraph Store["Storage Layer"]
+    StoreIF["FhirStore Interface"]
+    SQLite["SqliteStore — better-sqlite3"]
+  end
+
+  subgraph DB["SQLite Database"]
+    SysTbl["systems"]
+    LocTbl["locations"]
+    SchedTbl["schedules"]
+    SlotTbl["slots"]
+    ApptTbl["appointments"]
+  end
+
+  NewHL7 -->|"SIU + MSH-4/MSH-8 — auto-registers"| HL7R
+  NewREST -->|"POST /System/register"| SystemR
+  EHR -->|"HL7v2 SIU"| HL7R
+  WebApps -->|"FHIR REST + Bearer token"| Auth
+  Auth --> Routes
+  Routes --> StoreIF
+  StoreIF --> SQLite
+  SQLite --> DB
+  Evaporation -->|"Deletes expired systems"| SysTbl
+
+  classDef public fill:#dcfce7,stroke:#22c55e
+  classDef auth fill:#dbeafe,stroke:#3b82f6
+  classDef store fill:#fef3c7,stroke:#f59e0b
+  class DirectoryR public
+  class Auth auth
+  class SQLite,DB store
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Client Applications                          │
-│                  (Web Apps, Mobile Apps, EHR Systems)               │
-└────────────────────────────┬────────────────────────────────────────┘
-                             │
-                             │ FHIR R4 REST API
-                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Fastify HTTP Server                           │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                    Swagger UI (/docs)                        │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                         Routes Layer                          │  │
-│  │  ┌────────────┐  ┌────────────┐  ┌──────────────────────┐   │  │
-│  │  │ /Schedule  │  │   /Slot    │  │   /Appointment       │   │  │
-│  │  │  Routes    │  │   Routes   │  │      Routes          │   │  │
-│  │  └────────────┘  └────────────┘  └──────────────────────┘   │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────┬───────────────────────────────────────┘
-                              │
-                              │ FhirStore Interface
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Storage Layer                                 │
-│  ┌──────────────────────────────────────────────────────────────┐  │
-│  │                    SqliteStore                                │  │
-│  │  ┌────────────────────────────────────────────────────────┐  │  │
-│  │  │                   Better-SQLite3                       │  │  │
-│  │  └────────────────────────────────────────────────────────┘  │  │
-│  └──────────────────────────────────────────────────────────────┘  │
-│                                                                      │
-│  Future: PostgresStore, MysqlStore, MongoStore, MssqlStore          │
-└─────────────────────────────┬───────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     SQLite Database                                  │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐  │
-│  │  schedules   │  │    slots     │  │     appointments         │  │
-│  │              │  │              │  │                          │  │
-│  │ - id         │  │ - id         │  │ - id                     │  │
-│  │ - actor      │  │ - schedule_id│  │ - status                 │  │
-│  │ - active     │  │ - status     │  │ - start/end              │  │
-│  │ - planning_  │  │ - start/end  │  │ - participant            │  │
-│  │   horizon    │  │ - comment    │  │ - slot_refs              │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+
+## Multi-Tenant Data Model
+
+```mermaid
+erDiagram
+    systems ||--o{ locations : "has"
+    systems ||--o{ schedules : "owns"
+    locations ||--o{ schedules : "hosts"
+    schedules ||--o{ slots : "defines"
+    slots ||--o{ appointments : "booked as"
+
+    systems {
+        text id PK
+        text name
+        text url
+        text api_key_hash
+        text msh_facility UK
+        text msh_secret_hash
+        text challenge_token
+        text status
+        text last_activity_at
+        text created_at
+        int ttl_days
+    }
+    locations {
+        text id PK
+        text system_id FK
+        text name
+        text address
+        text city
+        text state
+        text zip
+        text phone
+        text hl7_location_id
+    }
+    schedules {
+        text id PK
+        text system_id FK
+        text location_id FK
+        text actor
+        int active
+    }
+    slots {
+        text id PK
+        text schedule_id FK
+        text status
+        text start
+        text end
+    }
+    appointments {
+        text id PK
+        text status
+        text start
+        text end
+        text participant
+    }
+```
+
+## System Onboarding Flows
+
+### HL7 Zero-Friction Path
+
+```mermaid
+sequenceDiagram
+    participant EHR as Legacy EHR
+    participant GW as FHIRTogether Gateway
+    participant DB as SQLite
+
+    EHR->>GW: SIU^S12 (MSH-4=HOSPITAL, MSH-8=secret)
+    GW->>DB: findOrCreateSystemByMSH("HOSPITAL", "secret")
+    alt First contact
+        DB-->>GW: {isNew: true, status: "unverified"}
+        GW->>DB: Create system + hash MSH-8 secret
+    else Returning system
+        DB-->>GW: {isNew: false, secretMatch: true/false}
+        alt Secret mismatch
+            GW-->>EHR: ACK AR (rejected)
+        end
+    end
+    GW->>DB: findOrCreateLocationByHL7(AIL segment)
+    GW->>DB: Create/update Schedule + Slots
+    GW-->>EHR: ACK AA (accepted)
+```
+
+### REST Registration Path
+
+```mermaid
+sequenceDiagram
+    participant Sys as New System
+    participant GW as FHIRTogether Gateway
+    participant URL as System URL
+
+    Sys->>GW: POST /System/register {name, url}
+    GW-->>Sys: {systemId, challengeToken, challengeUrl}
+    Note over Sys: Serve token at url/.well-known/fhirtogether-verify
+    Sys->>GW: POST /System/{id}/verify
+    GW->>URL: GET {url}/.well-known/fhirtogether-verify (TLS validated)
+    URL-->>GW: challengeToken
+    GW-->>Sys: {apiKey} (returned ONCE)
+    Note over Sys: Use Authorization: Bearer {apiKey} for all requests
+```
+
+### System Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> unverified: HL7 first contact
+    [*] --> pending: REST /System/register
+    pending --> active: TLS challenge verified
+    unverified --> active: Admin promotes
+    active --> expired: TTL exceeded (evaporation)
+    unverified --> expired: TTL exceeded (evaporation)
+    expired --> [*]: System + data cascade-deleted
 ```
 
 ## Data Flow: Booking an Appointment
@@ -239,10 +357,19 @@ server.ts
 ├── imports SqliteStore
 │   └── requires Database from better-sqlite3
 │   └── implements FhirStore interface (types/fhir.ts)
+├── imports registerApiKeyAuth (auth/apiKeyAuth.ts)
+│   └── imports validateBasicAuth (auth/basicAuth.ts)
+├── imports createMLLPServer (hl7/socket.ts)
 ├── registers routes/
+│   ├── systemRoutes.ts     (System registration + management)
+│   ├── locationRoutes.ts   (Location CRUD)
+│   ├── directoryRoutes.ts  (Public provider directory)
 │   ├── scheduleRoutes.ts
 │   ├── slotRoutes.ts
-│   └── appointmentRoutes.ts
+│   ├── appointmentRoutes.ts
+│   ├── hl7Routes.ts        (HL7v2 SIU ingestion)
+│   └── importRoutes.ts
+├── starts evaporation timer
 └── registers swagger plugins
 
 generateBusyOffice.ts
@@ -262,11 +389,15 @@ server.ts reads config
   ├── HOST (default: 0.0.0.0)
   ├── STORE_BACKEND (default: sqlite)
   ├── LOG_LEVEL (default: info)
-  └── ENABLE_TEST_ENDPOINTS (default: true)
+  ├── ENABLE_TEST_ENDPOINTS (default: true)
+  ├── AUTH_USERNAME / AUTH_PASSWORD (admin Basic Auth)
+  ├── SYSTEM_TTL_DAYS (default: 7)
+  ├── EVAPORATION_CHECK_INTERVAL_HOURS (default: 1)
+  └── DIRECTORY_SHOW_UNVERIFIED (default: false)
   ↓
 SqliteStore reads SQLITE_DB_PATH
   ↓
-Creates/opens ./data/fhirtogether.db
+Creates/opens ./data/fhirtogether.db (schema v3)
 ```
 
 ## Busy Office Simulation
@@ -282,6 +413,9 @@ Creates/opens ./data/fhirtogether.db
 
 | Resource    | GET (search) | GET (by ID) | POST (create) | PUT (update) | DELETE |
 |-------------|--------------|-------------|---------------|--------------|--------|
+| System      | ✅           | —           | ✅ (register) | ✅           | ✅     |
+| Location    | ✅           | ✅          | ✅            | ✅           | ✅     |
+| Directory   | ✅ (public)  | —           | —             | —            | —      |
 | Schedule    | ✅           | ✅          | ✅            | ✅           | ✅*    |
 | Slot        | ✅           | ✅          | ✅            | ✅           | ✅*    |
 | Appointment | ✅           | ✅          | ✅            | ✅           | ✅     |
@@ -289,6 +423,21 @@ Creates/opens ./data/fhirtogether.db
 *Requires ENABLE_TEST_ENDPOINTS=true
 
 ## Query Parameters Supported
+
+### /System
+- Admin: returns all systems
+- Bearer: returns own system details
+
+### /Location
+- `zip` - Filter by zip code
+- `_count` - Limit results
+
+### /Directory (public)
+- `zip` - Filter by zip code
+- `specialty` - Filter by provider specialty
+- `name` - Filter by provider or system name
+- `status` - Filter by system status (active/unverified/all)
+- `_format` - Response format (fhir/json/yaml/hl7)
 
 ### /Schedule
 - `actor` - Filter by practitioner reference

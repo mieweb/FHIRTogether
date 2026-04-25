@@ -76,6 +76,7 @@ interface SchedulerActions {
   
   // Utility
   getHoldTimeRemaining: () => number;
+  clearError: () => void;
 }
 
 export type SchedulerStore = SchedulerState & SchedulerActions;
@@ -494,6 +495,8 @@ export const useSchedulerStore = create<SchedulerStore>((set, get) => ({
     if (!holdExpiresAt) return 0;
     return Math.max(0, holdExpiresAt.getTime() - Date.now());
   },
+  
+  clearError: () => set({ error: null }),
 }));
 
 // Selector hooks for common patterns

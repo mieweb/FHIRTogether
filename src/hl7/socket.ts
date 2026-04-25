@@ -385,15 +385,49 @@ export class MLLPServer extends EventEmitter {
     const fhirResult = siuToFhirResources(siuMessage);
 
     try {
-      // Ensure schedule exists
+      // ── Auto-register system from MSH-4/MSH-8 ──
+      const facility = siuMessage.msh.sendingFacility;
+      const secret = siuMessage.msh.security || '';
+      const mshResult = await this.store!.findOrCreateSystemByMSH(facility, secret);
+
+      if (!mshResult.secretMatch) {
+        const ack = createACKResponse(
+          siuMessage.msh,
+          'AR',
+          `MSH-8 security mismatch for facility ${facility}`,
+          { code: '207', text: 'Application internal error', severity: 'E' }
+        );
+        return buildACKMessage(ack);
+      }
+
+      const systemId = mshResult.system.id;
+
+      // ── Auto-register location from AIL segment ──
+      let locationId: string | undefined;
+      if (siuMessage.ail?.locationResourceId) {
+        const loc = siuMessage.ail.locationResourceId;
+        const locName = loc.locationDescription || loc.pointOfCare || facility;
+        const locId = loc.pointOfCare || locName;
+        const locAddress = [loc.room, loc.building, loc.floor].filter(Boolean).join(', ') || undefined;
+        const location = await this.store!.findOrCreateLocationByHL7(systemId, locId, locName, locAddress);
+        locationId = location.id;
+      }
+
+      // Ensure schedule exists (scoped to system)
       const practitionerId = fhirResult.schedule.id?.replace('schedule-', '');
       const existingSchedules = await this.store!.getSchedules({
         actor: `Practitioner/${practitionerId}`,
+        system_id: systemId,
       });
 
       let scheduleId: string;
       if (existingSchedules.length === 0) {
-        const createdSchedule = await this.store!.createSchedule(fhirResult.schedule);
+        const scheduleWithSystem = {
+          ...fhirResult.schedule,
+          system_id: systemId,
+          location_id: locationId,
+        };
+        const createdSchedule = await this.store!.createSchedule(scheduleWithSystem);
         scheduleId = createdSchedule.id!;
       } else {
         scheduleId = existingSchedules[0].id!;

@@ -196,19 +196,60 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       // Parse the full SIU message
       const siuMessage = parseSIUMessage(rawMessage);
       
+      // ── Auto-register system from MSH-4/MSH-8 ──
+      const facility = siuMessage.msh.sendingFacility;
+      const secret = siuMessage.msh.security || '';
+      const mshResult = await store.findOrCreateSystemByMSH(facility, secret);
+
+      if (!mshResult.secretMatch) {
+        const ack = createACKResponse(
+          siuMessage.msh,
+          'AR',
+          `MSH-8 security mismatch for facility ${facility}`,
+          { code: '207', text: 'Application internal error', severity: 'E' }
+        );
+        let ackMessage = buildACKMessage(ack);
+        if (wrapResponse) { ackMessage = wrapMLLP(ackMessage); }
+        return sendAck(ackMessage, 'AR', 400);
+      }
+
+      const systemId = mshResult.system.id;
+
+      // Return API key early so callers get it even if schedule processing fails
+      if (mshResult.apiKey) {
+        reply.header('X-Api-Key', mshResult.apiKey);
+      }
+
+      // ── Auto-register location from AIL segment ──
+      let locationId: string | undefined;
+      if (siuMessage.ail?.locationResourceId) {
+        const loc = siuMessage.ail.locationResourceId;
+        const locName = loc.locationDescription || loc.pointOfCare || facility;
+        const locId = loc.pointOfCare || locName;
+        const locAddress = [loc.room, loc.building, loc.floor].filter(Boolean).join(', ') || undefined;
+        const location = await store.findOrCreateLocationByHL7(systemId, locId, locName, locAddress);
+        locationId = location.id;
+      }
+
       // Convert to FHIR resources
       const fhirResult = siuToFhirResources(siuMessage);
       
       // Process based on action type
       try {
-        // Ensure schedule exists
+        // Ensure schedule exists (scoped to system)
         const existingSchedules = await store.getSchedules({
           actor: `Practitioner/${fhirResult.schedule.id?.replace('schedule-', '')}`,
+          system_id: systemId,
         });
         
         let scheduleId: string;
         if (existingSchedules.length === 0) {
-          const createdSchedule = await store.createSchedule(fhirResult.schedule);
+          const scheduleWithSystem = {
+            ...fhirResult.schedule,
+            system_id: systemId,
+            location_id: locationId,
+          };
+          const createdSchedule = await store.createSchedule(scheduleWithSystem);
           scheduleId = createdSchedule.id!;
         } else {
           scheduleId = existingSchedules[0].id!;
@@ -242,6 +283,13 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
         let ackMessage = buildACKMessage(ack);
         if (wrapResponse) {
           ackMessage = wrapMLLP(ackMessage);
+        }
+        
+        // Include schedule reference in response header for deep linking
+        reply.header('X-Schedule-Ref', `Schedule/${scheduleId}`);
+        const actorDisplay = fhirResult.schedule.actor?.[0]?.display;
+        if (actorDisplay) {
+          reply.header('X-Schedule-Actor', actorDisplay);
         }
         
         return sendAck(ackMessage, 'AA', 200);

@@ -1,11 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Appointment, Schedule, Bundle } from '../types';
+import type { Appointment, Schedule, Slot, Bundle } from '../types';
 
 type ViewMode = 'day' | 'week';
 
 interface AppointmentListProps {
   /** Base URL of the FHIR server */
   fhirBaseUrl: string;
+  /** Pre-select a provider by schedule ID (from URL parameter) */
+  initialScheduleId?: string;
+  /** Initial date to display (ISO date string, e.g. '2026-04-28') */
+  initialDate?: string;
   /** Additional CSS classes */
   className?: string;
 }
@@ -139,32 +143,75 @@ function getStatusColor(status: string): string {
 }
 
 /**
- * Group appointments by date
+ * Slot status badge color mapping
  */
-function groupByDate(appointments: Appointment[]): Record<string, Appointment[]> {
-  const groups: Record<string, Appointment[]> = {};
-  for (const appt of appointments) {
-    if (!appt.start) continue;
-    const dateKey = appt.start.split('T')[0];
+function getSlotStatusColor(status: string): string {
+  switch (status) {
+    case 'free': return '#059669';
+    case 'busy': return '#dc2626';
+    case 'busy-unavailable': return '#6b7280';
+    case 'busy-tentative': return '#d97706';
+    default: return '#9ca3af';
+  }
+}
+
+/**
+ * Slot status display label
+ */
+function getSlotStatusLabel(status: string): string {
+  switch (status) {
+    case 'free': return 'Free';
+    case 'busy': return 'Busy';
+    case 'busy-unavailable': return 'Blocked';
+    case 'busy-tentative': return 'Tentative';
+    default: return status;
+  }
+}
+
+/** Unified timeline entry — either an appointment or a slot */
+type TimelineEntry =
+  | { kind: 'appointment'; data: Appointment }
+  | { kind: 'slot'; data: Slot };
+
+/**
+ * Group timeline entries by date, sorted by start time
+ */
+function groupByDate(entries: TimelineEntry[]): Record<string, TimelineEntry[]> {
+  const groups: Record<string, TimelineEntry[]> = {};
+  for (const entry of entries) {
+    const startTime = entry.kind === 'appointment' ? entry.data.start : entry.data.start;
+    if (!startTime) continue;
+    const dateKey = startTime.split('T')[0];
     if (!groups[dateKey]) groups[dateKey] = [];
-    groups[dateKey].push(appt);
+    groups[dateKey].push(entry);
   }
   // Sort each group by start time
   for (const group of Object.values(groups)) {
-    group.sort((a, b) => new Date(a.start!).getTime() - new Date(b.start!).getTime());
+    group.sort((a, b) => {
+      const aStart = a.kind === 'appointment' ? a.data.start! : a.data.start;
+      const bStart = b.kind === 'appointment' ? b.data.start! : b.data.start;
+      return new Date(aStart).getTime() - new Date(bStart).getTime();
+    });
   }
   return groups;
 }
 
-export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentListProps) {
+export function AppointmentList({ fhirBaseUrl, initialScheduleId, initialDate, className = '' }: AppointmentListProps) {
   const [providers, setProviders] = useState<Schedule[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<Schedule | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(false);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('day');
-  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [currentDate, setCurrentDate] = useState(() => {
+    if (initialDate) {
+      const d = new Date(initialDate + 'T00:00:00');
+      if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+  });
 
   const headers = useMemo(() => ({ 'Content-Type': 'application/json' }), []);
 
@@ -178,7 +225,15 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
         const bundle: Bundle<Schedule> = await res.json();
         const list = bundle.entry?.map((e) => e.resource) || [];
         setProviders(list);
-        if (list.length > 0) setSelectedProvider(list[0]);
+        // Pre-select provider from URL parameter, or fall back to first
+        const match = initialScheduleId
+          ? list.find((p) => p.id === initialScheduleId)
+          : null;
+        if (match) {
+          setSelectedProvider(match);
+        } else if (list.length > 0) {
+          setSelectedProvider(list[0]);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load providers');
       } finally {
@@ -186,7 +241,7 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
       }
     }
     fetchProviders();
-  }, [fhirBaseUrl, headers]);
+  }, [fhirBaseUrl, headers, initialScheduleId]);
 
   // Compute the date range for fetching
   const dateRange = useMemo(() => {
@@ -198,25 +253,20 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
     return { start: weekDates[0], end: weekDates[6] };
   }, [viewMode, currentDate]);
 
-  // Fetch appointments when provider or date range changes
+  // Fetch appointments and slots when provider or date range changes
   useEffect(() => {
     if (!selectedProvider) return;
 
-    async function fetchAppointments() {
+    async function fetchData() {
       setLoading(true);
       setError(null);
       try {
-        // Fetch all appointments for the date range
-        // Build date queries for each day in range
+        const practitionerRef = selectedProvider!.actor?.[0]?.reference || `Schedule/${selectedProvider!.id}`;
+        const scheduleId = selectedProvider!.id!;
+        
+        // Fetch appointments day-by-day
         const startDate = new Date(dateRange.start + 'T00:00:00');
         const endDate = new Date(dateRange.end + 'T23:59:59');
-        
-        // Use actor param to filter by provider's practitioner reference
-        const practitionerRef = selectedProvider!.actor?.[0]?.reference || `Schedule/${selectedProvider!.id}`;
-        
-        // For multi-day ranges, we need to fetch day by day since the API
-        // filters by single date. Alternatively, fetch without date filter
-        // and filter client-side, or fetch each day.
         const allAppointments: Appointment[] = [];
         const current = new Date(startDate);
         
@@ -231,18 +281,56 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
           }
           current.setDate(current.getDate() + 1);
         }
-
         setAppointments(allAppointments);
+
+        // Fetch all slots (any status) for this schedule in the date range
+        const slotParams = new URLSearchParams({
+          schedule: `Schedule/${scheduleId}`,
+          start: `${dateRange.start}T00:00:00`,
+          end: `${dateRange.end}T23:59:59`,
+        });
+        const slotRes = await fetch(`${fhirBaseUrl}/Slot?${slotParams}`, { headers });
+        if (slotRes.ok) {
+          const slotBundle: Bundle<Slot> = await slotRes.json();
+          setSlots(slotBundle.entry?.map((e) => e.resource) || []);
+        } else {
+          setSlots([]);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load appointments');
+        setError(err instanceof Error ? err.message : 'Failed to load data');
       } finally {
         setLoading(false);
       }
     }
-    fetchAppointments();
+    fetchData();
   }, [selectedProvider, dateRange, fhirBaseUrl, headers]);
 
-  const groupedAppointments = useMemo(() => groupByDate(appointments), [appointments]);
+  // Merge appointments and slots into a unified timeline
+  const timeline = useMemo<TimelineEntry[]>(() => {
+    const entries: TimelineEntry[] = [];
+    for (const appt of appointments) {
+      entries.push({ kind: 'appointment', data: appt });
+    }
+    for (const slot of slots) {
+      entries.push({ kind: 'slot', data: slot });
+    }
+    return entries;
+  }, [appointments, slots]);
+
+  const groupedTimeline = useMemo(() => groupByDate(timeline), [timeline]);
+
+  // Slot summary counts per day
+  const slotSummary = useMemo(() => {
+    const summary: Record<string, { free: number; busy: number; blocked: number }> = {};
+    for (const slot of slots) {
+      const dateKey = slot.start.split('T')[0];
+      if (!summary[dateKey]) summary[dateKey] = { free: 0, busy: 0, blocked: 0 };
+      if (slot.status === 'free') summary[dateKey].free++;
+      else if (slot.status === 'busy' || slot.status === 'busy-tentative') summary[dateKey].busy++;
+      else if (slot.status === 'busy-unavailable') summary[dateKey].blocked++;
+    }
+    return summary;
+  }, [slots]);
   
   // Dates to display (either single day or week)
   const displayDates = useMemo(() => {
@@ -285,6 +373,8 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
   }, [viewMode, currentDate]);
 
   const totalCount = appointments.length;
+  const totalSlots = slots.length;
+  const freeSlots = slots.filter((s) => s.status === 'free').length;
 
   if (providersLoading) {
     return (
@@ -411,15 +501,16 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
 
       {/* Appointments */}
       {!loading && !error && (
-        <section className="fs-apptlist-content" aria-label="Appointments list">
+        <section className="fs-apptlist-content" aria-label="Schedule timeline">
           <p className="fs-apptlist-summary">
-            {totalCount === 0
-              ? 'No appointments scheduled'
-              : `${totalCount} appointment${totalCount !== 1 ? 's' : ''}`}
+            {totalCount === 0 && totalSlots === 0
+              ? 'No appointments or slots'
+              : `${totalCount} appointment${totalCount !== 1 ? 's' : ''}${totalSlots > 0 ? ` · ${freeSlots} free / ${totalSlots} slots` : ''}`}
           </p>
 
           {displayDates.map((dateStr) => {
-            const dayAppts = groupedAppointments[dateStr] || [];
+            const dayEntries = groupedTimeline[dateStr] || [];
+            const daySummary = slotSummary[dateStr];
             const showDateHeader = viewMode === 'week';
 
             return (
@@ -428,50 +519,104 @@ export function AppointmentList({ fhirBaseUrl, className = '' }: AppointmentList
                   <h3 className="fs-apptlist-day-header">
                     {formatDateHeader(dateStr)}
                     <span className="fs-apptlist-day-count">
-                      {dayAppts.length > 0 ? `${dayAppts.length} appt${dayAppts.length !== 1 ? 's' : ''}` : 'None'}
+                      {dayEntries.length > 0 ? `${dayEntries.length} item${dayEntries.length !== 1 ? 's' : ''}` : 'None'}
                     </span>
                   </h3>
                 )}
 
-                {dayAppts.length === 0 && viewMode === 'day' && (
-                  <div className="fs-apptlist-empty">
-                    <p>No appointments on this day.</p>
+                {/* Slot availability summary bar */}
+                {daySummary && (
+                  <div className="fs-slot-summary" aria-label="Slot availability summary">
+                    {daySummary.free > 0 && (
+                      <span className="fs-slot-badge fs-slot-free">{daySummary.free} Free</span>
+                    )}
+                    {daySummary.busy > 0 && (
+                      <span className="fs-slot-badge fs-slot-busy">{daySummary.busy} Busy</span>
+                    )}
+                    {daySummary.blocked > 0 && (
+                      <span className="fs-slot-badge fs-slot-blocked">{daySummary.blocked} Blocked</span>
+                    )}
                   </div>
                 )}
 
-                {dayAppts.map((appt) => (
-                  <article
-                    key={appt.id}
-                    className="fs-apptlist-card"
-                    aria-label={`Appointment at ${formatTime(appt.start!)}`}
-                  >
-                    <div className="fs-apptlist-card-time">
-                      <span className="fs-apptlist-time-start">{formatTime(appt.start!)}</span>
-                      <span className="fs-apptlist-time-end">{formatTime(appt.end!)}</span>
-                      <span className="fs-apptlist-duration">{formatDuration(appt.start!, appt.end!)}</span>
-                    </div>
-                    <div className="fs-apptlist-card-details">
-                      <div className="fs-apptlist-card-header">
-                        <span className="fs-apptlist-patient">{getPatientDisplay(appt)}</span>
-                        <span
-                          className="fs-apptlist-status"
-                          style={{ backgroundColor: getStatusColor(appt.status) }}
-                        >
-                          {appt.status}
-                        </span>
+                {dayEntries.length === 0 && viewMode === 'day' && (
+                  <div className="fs-apptlist-empty">
+                    <p>No appointments or slots on this day.</p>
+                  </div>
+                )}
+
+                {dayEntries.map((entry) => {
+                  if (entry.kind === 'appointment') {
+                    const appt = entry.data;
+                    return (
+                      <article
+                        key={`appt-${appt.id}`}
+                        className="fs-apptlist-card"
+                        aria-label={`Appointment at ${formatTime(appt.start!)}`}
+                      >
+                        <div className="fs-apptlist-card-time">
+                          <span className="fs-apptlist-time-start">{formatTime(appt.start!)}</span>
+                          <span className="fs-apptlist-time-end">{formatTime(appt.end!)}</span>
+                          <span className="fs-apptlist-duration">{formatDuration(appt.start!, appt.end!)}</span>
+                        </div>
+                        <div className="fs-apptlist-card-details">
+                          <div className="fs-apptlist-card-header">
+                            <span className="fs-apptlist-patient">{getPatientDisplay(appt)}</span>
+                            <span
+                              className="fs-apptlist-status"
+                              style={{ backgroundColor: getStatusColor(appt.status) }}
+                            >
+                              {appt.status}
+                            </span>
+                          </div>
+                          {appt.description && (
+                            <p className="fs-apptlist-type">{appt.description}</p>
+                          )}
+                          {appt.appointmentType?.text && (
+                            <p className="fs-apptlist-type">{appt.appointmentType.text}</p>
+                          )}
+                          {getLocationDisplay(appt) && (
+                            <p className="fs-apptlist-location">{getLocationDisplay(appt)}</p>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  }
+                  // Slot entry
+                  const slot = entry.data;
+                  return (
+                    <article
+                      key={`slot-${slot.id}`}
+                      className={`fs-apptlist-card fs-slot-card fs-slot-card-${slot.status}`}
+                      aria-label={`${getSlotStatusLabel(slot.status)} slot at ${formatTime(slot.start)}`}
+                    >
+                      <div className="fs-apptlist-card-time">
+                        <span className="fs-apptlist-time-start">{formatTime(slot.start)}</span>
+                        <span className="fs-apptlist-time-end">{formatTime(slot.end)}</span>
+                        <span className="fs-apptlist-duration">{formatDuration(slot.start, slot.end)}</span>
                       </div>
-                      {appt.description && (
-                        <p className="fs-apptlist-type">{appt.description}</p>
-                      )}
-                      {appt.appointmentType?.text && (
-                        <p className="fs-apptlist-type">{appt.appointmentType.text}</p>
-                      )}
-                      {getLocationDisplay(appt) && (
-                        <p className="fs-apptlist-location">{getLocationDisplay(appt)}</p>
-                      )}
-                    </div>
-                  </article>
-                ))}
+                      <div className="fs-apptlist-card-details">
+                        <div className="fs-apptlist-card-header">
+                          <span className="fs-apptlist-patient fs-slot-label">
+                            {getSlotStatusLabel(slot.status)}
+                          </span>
+                          <span
+                            className="fs-apptlist-status"
+                            style={{ backgroundColor: getSlotStatusColor(slot.status) }}
+                          >
+                            {slot.status}
+                          </span>
+                        </div>
+                        {slot.comment && (
+                          <p className="fs-apptlist-type">{slot.comment}</p>
+                        )}
+                        {slot.serviceType?.[0]?.text && (
+                          <p className="fs-apptlist-type">{slot.serviceType[0].text}</p>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             );
           })}

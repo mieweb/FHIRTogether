@@ -58,7 +58,11 @@ flowchart LR
 
 - ✅ Full support for FHIR R4 RESTful APIs:
   - `/Schedule`, `/Slot`, `/Appointment`
-- 🔁 HL7v2 message ingestion (`SIU^S12`, `S13`, `S15`)
+- 🔁 HL7v2 message ingestion (`SIU^S12`, `S13`, `S15`) via HTTP and MLLP socket
+- 🏥 **Multi-tenant synapse gateway** — systems self-register via HL7 or REST
+- 🔑 **Two onboarding paths**: zero-friction HL7 (MSH-4/MSH-8) and REST with TLS challenge-response
+- 🌐 **Public provider directory** (`/Directory`) in FHIR, JSON, YAML, and HL7v2 MFN formats
+- ⏱️ **System evaporation** — inactive systems auto-expire after configurable TTL
 - 🧩 Pluggable backend support: MongoDB, MySQL, PostgreSQL, MSSQL
 - 🌐 OpenAPI 3.1 (Swagger UI) auto-generated from routes
 - 🧪 Test mode for seeding schedules, clearing data, or simulating providers
@@ -67,17 +71,73 @@ flowchart LR
 ```mermaid
 flowchart LR
   A[Legacy EHR]
-  B[FHIRTogether FHIR Server]
+  B[FHIRTogether Synapse Gateway]
   C[Scheduling Broker - BlueHive]
   D[Users and Provider Apps]
+  E[New System — HL7]
+  F[New System — REST]
 
+  E -->|SIU with MSH-4/MSH-8 — auto-registers| B
+  F -->|POST /System/register — TLS verify| B
   A -->|HL7v2 SIU S13 S15| B
   B -->|FHIR Schedule Slot Appointment| C
   C -->|Book and Update via FHIR| B
   B -->|HL7v2 ACK or Updates| A
   D -->|Discover availability and request booking| C
+  D -->|GET /Directory — public| B
   C -->|Notifications and confirmations| D
 ```
+
+---
+
+## 🏥 Multi-Tenant Synapse Gateway
+
+FHIRTogether operates as a **unified multi-tenant gateway**. Every system (EHR, clinic, hospital) that connects becomes a tenant — either automatically via HL7 or explicitly via REST registration.
+
+### Onboarding Path 1: Zero-Friction HL7
+
+Just start sending SIU messages. FHIRTogether auto-registers the system using:
+- **MSH-4** (Sending Facility) as identity
+- **MSH-8** (Security) as shared secret
+
+> **Try it now:** The [HL7 Message Tester](/hl7-tester) page provides editable example SIU messages you can send directly to the API — no tools required.
+
+On first contact, the system is created as `unverified`. Subsequent messages with the same MSH-4 must match MSH-8 or are rejected. Locations are auto-created from AIL segments.
+
+### Onboarding Path 2: REST API Registration
+
+1. `POST /System/register` with your name and URL → receive a challenge token
+2. Serve the token at `{url}/.well-known/fhirtogether-verify`
+3. `POST /System/{id}/verify` → FHIRTogether fetches the token over TLS, verifies, and returns a one-time API key
+4. Use `Authorization: Bearer <api-key>` for all subsequent requests
+
+### System Lifecycle
+
+Systems follow a trust progression: `unverified` → `pending` → `active` → `expired`
+
+- **Unverified**: Auto-created via HL7. Can send data but not yet trusted.
+- **Pending**: Registered via REST, awaiting TLS challenge verification.
+- **Active**: Verified. Full API access.
+- **Expired**: Evaporated after TTL days of inactivity. All data cascade-deleted.
+
+### System Evaporation
+
+Inactive systems automatically expire. Configurable via:
+- `SYSTEM_TTL_DAYS` (default: 7) — days of inactivity before expiration
+- `EVAPORATION_CHECK_INTERVAL_HOURS` (default: 1) — how often the eviction job runs
+
+### Public Provider Directory
+
+`GET /Directory` is public (no auth required) and supports four output formats:
+
+| Format | Content-Type | `_format` param |
+|--------|-------------|-----------------|
+| FHIR Bundle (Organization + Location + PractitionerRole) | `application/fhir+json` | `fhir` |
+| JSON | `application/json` | `json` |
+| YAML | `text/yaml` | `yaml` |
+| HL7v2 MFN^M02 | `x-application/hl7-v2+er7` | `hl7` |
+
+Query parameters: `zip`, `specialty`, `name`, `status`
 
 ---
 
@@ -155,6 +215,8 @@ Send HL7v2 scheduling messages (e.g., `SIU^S12`, `S13`, `S15`) to:
 POST /hl7/siu
 ```
 
+> **Interactive testing:** Use the [HL7 Message Tester](/hl7-tester) to try example messages with editable MSH fields and one-click submission.
+
 **Option 1: Raw HL7 text** (Content-Type: `text/plain` or `x-application/hl7-v2+er7`)
 ```
 MSH|^~\&|LEGACY_EHR|MAIN_HOSPITAL|FHIRTOGETHER|SCHEDULING_GATEWAY|20231209120000||SIU^S12|12345|P|2.3
@@ -195,14 +257,27 @@ The server parses the message and converts it into FHIR `Slot` and `Schedule` re
 
 FHIR-compliant endpoints (all responses follow FHIR Bundles or resource schemas):
 
-| Method | Path             | Description                      |
-| ------ | ---------------- | -------------------------------- |
-| GET    | `/Slot`          | Search for free/busy slots       |
-| POST   | `/Slot`          | Block a time slot                |
-| GET    | `/Schedule`      | Retrieve provider availability   |
-| POST   | `/Schedule`      | Define provider planning horizon |
-| POST   | `/Appointment`   | Book an appointment              |
-| POST   | `/hl7/siu`       | Ingest HL7v2 SIU message (text or JSON) |
+| Method | Path             | Auth | Description                      |
+| ------ | ---------------- | ---- | -------------------------------- |
+| POST   | `/System/register` | Public | Register a new system (REST onboarding) |
+| POST   | `/System/:id/verify` | Public | Complete TLS challenge-response |
+| GET    | `/System`        | Bearer/Admin | Get own system details (admin: list all) |
+| PUT    | `/System`        | Bearer | Update system name |
+| DELETE | `/System`        | Bearer | Voluntary de-registration (cascade) |
+| POST   | `/System/rekey`  | Bearer | Rotate API key |
+| PUT    | `/System/:id/status` | Admin | Change system verification status |
+| GET    | `/Directory`     | Public | Public provider directory (FHIR/JSON/YAML/HL7) |
+| POST   | `/Location`      | Bearer | Create a location |
+| GET    | `/Location`      | Bearer | List locations (FHIR Bundle) |
+| GET    | `/Location/:id`  | Bearer | Get location by ID |
+| PUT    | `/Location/:id`  | Bearer | Update location |
+| DELETE | `/Location/:id`  | Bearer | Delete location |
+| GET    | `/Slot`          | Bearer | Search for free/busy slots       |
+| POST   | `/Slot`          | Bearer | Block a time slot                |
+| GET    | `/Schedule`      | Bearer | Retrieve provider availability   |
+| POST   | `/Schedule`      | Bearer | Define provider planning horizon |
+| POST   | `/Appointment`   | Bearer | Book an appointment              |
+| POST   | `/hl7/siu`       | MSH-8 | Ingest HL7v2 SIU message (text or JSON) |
 
 ## 🧪 Test Server Mode
 
@@ -212,9 +287,19 @@ Endpoints also support administrative operations (in test mode only):
 * `DELETE /Schedule`
 * `POST /$simulate-week` — generate random provider availability
 
-## 🔐 Auth (Optional)
+## 🔐 Authentication
 
-FHIR-style bearer token authentication is planned. You can stub in simple token-based headers using the `authPlugin`.
+FHIRTogether supports three authentication modes:
+
+| Mode | Header | Use Case |
+|------|--------|----------|
+| **API Key (Bearer)** | `Authorization: Bearer <api-key>` | System-to-system API access |
+| **Basic Auth (Admin)** | `Authorization: Basic <base64>` | Admin operations via `AUTH_USERNAME`/`AUTH_PASSWORD` |
+| **MSH-8 (HL7)** | HL7 Security field | Auto-registration via HL7v2 messages |
+
+API keys are 64-character hex strings generated during verification (`POST /System/:id/verify`). They are stored as SHA-256 hashes — the plaintext is returned exactly once and never stored. Keys can be rotated via `POST /System/rekey`.
+
+Public endpoints (no auth required): `/health`, `/docs`, `/demo`, `/Directory`, `/System/register`, `/System/:id/verify`
 
 ## 📄 License
 
@@ -226,18 +311,25 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 
 ## 🧭 Roadmap
 
-* [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like https://cal.com/ or Calend.ly.
-* [ ] Add login/authentication support for admins
-* [ ] Implement google/microsoft/apple login for the scheduling portal for end users
-* [ ] Implement the ability for an admin to define custom appointment types with different durations and constraints
+- [x] Multi-tenant synapse gateway with system registration
+- [x] Zero-friction HL7 onboarding (MSH-4/MSH-8 auto-registration)
+- [x] REST onboarding with TLS challenge-response verification
+- [x] API key authentication (Bearer token)
+- [x] Public provider directory (/Directory) with FHIR, JSON, YAML, HL7v2 formats
+- [x] System evaporation (auto-expire inactive systems)
+- [x] Location management (CRUD + HL7 AIL auto-creation)
+- [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like https://cal.com/ or Calend.ly.
+- [ ] Add login/authentication support for admins
+- [ ] Implement google/microsoft/apple login for the scheduling portal for end users
+- [ ] Implement the ability for an admin to define custom appointment types with different durations and constraints
   - [ ] Admin UI for managing providers, appointment types, and schedules
   - [ ] Implement yaml import/export for schedule definitions including API to update
   
-* [ ] FHIR Subscription support for appointment updates
-* [ ] Add SMART-on-FHIR / OAuth support - review https://github.com/mieweb/poc-auth-architecture 
-* [ ] `$find-appointment` operation
-* [ ] HL7v2 SRM^S03 request/response handling
-* [ ] FHIR Bulk Export for schedules
+- [ ] FHIR Subscription support for appointment updates
+- [ ] Add SMART-on-FHIR / OAuth support - review https://github.com/mieweb/poc-auth-architecture 
+- [ ] `$find-appointment` operation
+- [ ] HL7v2 SRM^S03 request/response handling
+- [ ] FHIR Bulk Export for schedules
 
 ---
 

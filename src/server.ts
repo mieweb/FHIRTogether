@@ -12,8 +12,12 @@ import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
 import { importRoutes } from './routes/importRoutes';
 import { hl7Routes } from './routes/hl7Routes';
+import { systemRoutes } from './routes/systemRoutes';
+import { locationRoutes } from './routes/locationRoutes';
+import { directoryRoutes } from './routes/directoryRoutes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
-import { registerBasicAuth } from './auth/basicAuth';
+// Basic auth is now handled internally by apiKeyAuth as a fallback
+import { registerApiKeyAuth } from './auth/apiKeyAuth';
 
 // Load environment variables
 config();
@@ -32,6 +36,7 @@ const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   ? process.env.HL7_MLLP_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
   : [];
 const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
+const EVAPORATION_CHECK_INTERVAL_HOURS = parseInt(process.env.EVAPORATION_CHECK_INTERVAL_HOURS || '1', 10);
 
 /** Recursively find the newest mtime in a directory tree. */
 function getNewestMtime(dir: string): number {
@@ -66,11 +71,8 @@ async function buildServer() {
     origin: true,
   });
 
-  // Register global Basic Auth (skips /health, /docs/*, /demo, /scheduler/*)
-  const authActive = registerBasicAuth(fastify);
-  if (!authActive) {
-    fastify.log.warn('No AUTH_USERNAME/AUTH_PASSWORD set - all API endpoints are OPEN');
-  }
+  // Auth is registered after store initialization (needs store for API key lookups)
+  // See registerApiKeyAuth() call below
 
   // Add content type parser for text/plain (for raw HL7 messages)
   fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (_req, body, done) => {
@@ -88,7 +90,8 @@ async function buildServer() {
       openapi: '3.1.0',
       info: {
         title: 'FHIRTogether Scheduling Synapse API',
-        description: 'FHIR-compliant gateway and test server for schedule and appointment availability',
+        description: 'FHIR-compliant gateway and test server for schedule and appointment availability.\n\n'
+          + '**Quick Links:** [HL7 Message Tester](/hl7-tester) · [Scheduler Demo](/demo) · [Home](/)',
         version: '1.0.0',
         contact: {
           name: 'MieWeb',
@@ -106,10 +109,13 @@ async function buildServer() {
         },
       ],
       tags: [
+        { name: 'System', description: 'System registration and management' },
+        { name: 'Location', description: 'Location management' },
         { name: 'Schedule', description: 'Provider schedule management' },
         { name: 'Slot', description: 'Time slot availability' },
         { name: 'Appointment', description: 'Appointment booking and management' },
-        { name: 'HL7', description: 'HL7v2 message ingestion' },
+        { name: 'Directory', description: 'Public provider directory' },
+        { name: 'HL7', description: 'HL7v2 message ingestion — [open HL7 Message Tester](/hl7-tester)' },
       ],
     },
   });
@@ -165,22 +171,32 @@ async function buildServer() {
     throw new Error(`Unsupported store backend: ${STORE_BACKEND}`);
   }
 
-  // Check if the scheduler widget build is stale
-  const schedulerDistPath = path.join(__dirname, '..', 'packages', 'fhir-scheduler', 'dist', 'standalone.js');
+  // Register API key auth (with Basic Auth admin fallback)
+  registerApiKeyAuth(fastify, store);
+  if (AUTH_ENABLED) {
+    fastify.log.info('Auth: API key + Basic Auth (admin) enabled');
+  } else {
+    fastify.log.info('Auth: API key only (no admin Basic Auth fallback)');
+  }
+
+  // Check if the scheduler widget builds are stale or missing
+  const schedulerDistDir = path.join(__dirname, '..', 'packages', 'fhir-scheduler', 'dist');
   const schedulerSrcDir = path.join(__dirname, '..', 'packages', 'fhir-scheduler', 'src');
+  const requiredBundles = ['standalone.js', 'provider-view.js'];
   try {
-    if (!fs.existsSync(schedulerDistPath)) {
+    const missing = requiredBundles.filter(f => !fs.existsSync(path.join(schedulerDistDir, f)));
+    if (missing.length > 0) {
       startupWarnings.push(
-        '⚠️  Scheduler widget not built — /demo will not work',
-        '   Run:  cd packages/fhir-scheduler && npm run build:standalone',
+        `⚠️  Scheduler widget not built — missing ${missing.join(', ')}`,
+        '   Run:  npm run build   (or:  cd packages/fhir-scheduler && npm run build)',
       );
     } else {
-      const distMtime = fs.statSync(schedulerDistPath).mtimeMs;
+      const oldestDist = Math.min(...requiredBundles.map(f => fs.statSync(path.join(schedulerDistDir, f)).mtimeMs));
       const newestSrc = getNewestMtime(schedulerSrcDir);
-      if (newestSrc > distMtime) {
+      if (newestSrc > oldestDist) {
         startupWarnings.push(
           '⚠️  Scheduler widget build is stale (source files are newer than dist)',
-          '   Run:  cd packages/fhir-scheduler && npm run build:standalone',
+          '   Run:  npm run build   (or:  cd packages/fhir-scheduler && npm run build)',
         );
       }
     }
@@ -194,6 +210,9 @@ async function buildServer() {
     await slotRoutes(instance, store);
     await appointmentRoutes(instance, store);
     await importRoutes(instance, store);
+    await systemRoutes(instance, store);
+    await locationRoutes(instance, store);
+    await directoryRoutes(instance, store);
   });
 
   // Register HL7 routes
@@ -224,6 +243,9 @@ async function buildServer() {
         demo: '/demo',
         fhirVersion: 'R4',
         endpoints: {
+          system: '/System',
+          location: '/Location',
+          directory: '/Directory',
           schedule: '/Schedule',
           slot: '/Slot',
           appointment: '/Appointment',
@@ -243,6 +265,11 @@ async function buildServer() {
 
     // Serve the welcome page HTML from public/index.html
     return reply.sendFile('index.html', path.join(__dirname, '..', 'public'));
+  });
+
+  // Serve the HL7 Message Tester page
+  fastify.get('/hl7-tester', async (_request, reply) => {
+    return reply.sendFile('hl7-tester.html', path.join(__dirname, '..', 'public'));
   });
 
   // Graceful shutdown
@@ -278,6 +305,24 @@ async function start() {
     await runHL7LogCleanup();
     const hl7LogCleanupInterval = setInterval(runHL7LogCleanup, 24 * 60 * 60 * 1000);
     hl7LogCleanupInterval.unref(); // don't keep the process alive just for this
+
+    // ── System evaporation (runs once at startup + every N hours) ──
+    const runEvaporation = async () => {
+      try {
+        const result = await store.evaporateExpiredSystems();
+        if (result.count > 0) {
+          for (const sys of result.systems) {
+            fastify.log.info({ systemId: sys.id, name: sys.name, mshFacility: sys.mshFacility }, 'System evaporated (TTL exceeded)');
+          }
+          fastify.log.info({ count: result.count }, 'System evaporation complete');
+        }
+      } catch (err) {
+        fastify.log.error({ err }, 'System evaporation failed');
+      }
+    };
+    await runEvaporation();
+    const evaporationInterval = setInterval(runEvaporation, EVAPORATION_CHECK_INTERVAL_HOURS * 60 * 60 * 1000);
+    evaporationInterval.unref();
     
     // Start MLLP socket server if enabled
     let mllpServer: MLLPServer | null = null;

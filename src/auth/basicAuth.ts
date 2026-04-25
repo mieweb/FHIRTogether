@@ -13,7 +13,7 @@ import { timingSafeEqual } from 'crypto';
 
 /** Paths that never require authentication. */
 const PUBLIC_PATH_PREFIXES = ['/health', '/docs', '/demo', '/scheduler/'];
-const PUBLIC_EXACT_PATHS = new Set(['/', '/health']);
+const PUBLIC_EXACT_PATHS = new Set(['/', '/health', '/favicon.ico']);
 
 /**
  * Returns true when the given URL should be accessible without auth.
@@ -24,6 +24,28 @@ function isPublicPath(url: string): boolean {
 
   if (PUBLIC_EXACT_PATHS.has(path)) return true;
   return PUBLIC_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/** FHIR resource paths that allow unauthenticated GET (read-only). */
+const PUBLIC_READ_PREFIXES = ['/Schedule', '/Slot', '/Appointment'];
+
+/**
+ * Returns true when the request is a public read-only FHIR query.
+ */
+function isPublicRead(method: string, url: string): boolean {
+  if (method !== 'GET' && method !== 'HEAD') return false;
+  const path = url.split('?')[0];
+  return PUBLIC_READ_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+/** Slot $hold and Appointment booking — public writes secured by hold tokens, not API keys. */
+const PATIENT_WRITE_RE = /^\/Slot\/[^/]+\/\$hold(\/[^/]+)?$/;
+
+function isPublicWrite(method: string, url: string): boolean {
+  const path = url.split('?')[0];
+  if (PATIENT_WRITE_RE.test(path)) return true;
+  if (method === 'POST' && path === '/Appointment') return true;
+  return false;
 }
 
 /**
@@ -84,6 +106,8 @@ export function registerBasicAuth(fastify: FastifyInstance): boolean {
 
   fastify.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
     if (isPublicPath(request.url)) return;
+    if (isPublicRead(request.method, request.url)) return;
+    if (isPublicWrite(request.method, request.url)) return;
 
     if (!validateBasicAuth(request.headers.authorization, username, password)) {
       const contentType = request.headers['content-type'] || '';

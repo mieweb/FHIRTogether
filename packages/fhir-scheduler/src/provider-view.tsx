@@ -9,6 +9,11 @@ const fhirBaseUrl = window.location.hostname === 'localhost' || window.location.
   ? 'http://localhost:4010'
   : window.location.origin;
 
+// Read optional schedule ID from URL (?schedule=xxx)
+const urlParams = new URLSearchParams(window.location.search);
+const initialScheduleId = urlParams.get('schedule') || undefined;
+const initialDate = urlParams.get('date') || undefined;
+
 type TabType = 'appointments' | 'import';
 
 function ProviderView() {
@@ -55,7 +60,7 @@ function ProviderView() {
         hidden={activeTab !== 'appointments'}
       >
         {activeTab === 'appointments' && (
-          <AppointmentList key={refreshKey} fhirBaseUrl={fhirBaseUrl} />
+          <AppointmentList key={refreshKey} fhirBaseUrl={fhirBaseUrl} initialScheduleId={initialScheduleId} initialDate={initialDate} />
         )}
       </div>
 
