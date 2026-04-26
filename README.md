@@ -66,6 +66,7 @@ flowchart LR
 - 🧩 Pluggable backend support: MongoDB, MySQL, PostgreSQL, MSSQL
 - 🌐 OpenAPI 3.1 (Swagger UI) auto-generated from routes
 - 🧪 Test mode for seeding schedules, clearing data, or simulating providers
+- 🤖 **MCP server** — expose scheduling tools to LLM agents via [Model Context Protocol](MCP_SERVER.md)
 - ⚡ Fastify-based, modern TypeScript stack
 
 ```mermaid

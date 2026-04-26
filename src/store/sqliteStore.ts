@@ -149,7 +149,6 @@ export class SqliteStore implements FhirStore {
         comment TEXT,
         patient_instruction TEXT,
         participant TEXT NOT NULL,
-        identifier TEXT,
         meta_last_updated TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
@@ -905,8 +904,7 @@ export class SqliteStore implements FhirStore {
         id, status, identifier, cancelation_reason, service_category, service_type,
         specialty, appointment_type, reason_code, priority, description,
         slot_refs, start, end, created, comment, patient_instruction,
-<<<<<<< HEAD
-        participant, identifier, meta_last_updated
+        participant, meta_last_updated
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
@@ -929,7 +927,6 @@ export class SqliteStore implements FhirStore {
       appointment.comment,
       appointment.patientInstruction,
       JSON.stringify(appointment.participant),
-      JSON.stringify(appointment.identifier || null),
       now
     );
 
@@ -1316,7 +1313,6 @@ export class SqliteStore implements FhirStore {
       comment: row.comment,
       patientInstruction: row.patient_instruction,
       participant: this.parseJson(row.participant),
-      identifier: this.parseJson(row.identifier),
       meta: { lastUpdated: row.meta_last_updated },
     };
   }
