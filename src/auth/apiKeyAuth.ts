@@ -24,6 +24,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/System/register',
   '/hl7-tester',
   '/mcp/',
+  '/$bulk-publish',
 ];
 
 const PUBLIC_EXACT_PATHS = new Set(['/', '/health', '/favicon.ico']);

@@ -15,6 +15,7 @@ import { hl7Routes } from './routes/hl7Routes';
 import { systemRoutes } from './routes/systemRoutes';
 import { locationRoutes } from './routes/locationRoutes';
 import { directoryRoutes } from './routes/directoryRoutes';
+import { smartSchedulingRoutes, getSmartSchedulingConfig } from './routes/smartSchedulingRoutes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
 // Basic auth is now handled internally by apiKeyAuth as a fallback
 import { registerApiKeyAuth } from './auth/apiKeyAuth';
@@ -118,6 +119,7 @@ async function buildServer() {
         { name: 'Appointment', description: 'Appointment booking and management' },
         { name: 'Directory', description: 'Public provider directory' },
         { name: 'HL7', description: 'HL7v2 message ingestion — [open HL7 Message Tester](/hl7-tester)' },
+        { name: 'SMART Scheduling Links', description: 'SMART Scheduling Links bulk publication — [$bulk-publish](/$bulk-publish)' },
       ],
     },
   });
@@ -217,6 +219,15 @@ async function buildServer() {
     await directoryRoutes(instance, store);
   });
 
+  // Register SMART Scheduling Links routes (public, no auth required)
+  const smartConfig = getSmartSchedulingConfig();
+  if (smartConfig.enabled) {
+    await fastify.register(async (instance) => {
+      await smartSchedulingRoutes(instance, store, smartConfig);
+    });
+    fastify.log.info('SMART Scheduling Links: $bulk-publish enabled');
+  }
+
   // Register HL7 routes
   await fastify.register(async (instance) => {
     await hl7Routes(instance, store);
@@ -264,6 +275,7 @@ async function buildServer() {
           hl7Status: '/hl7/status',
           health: '/health',
           demo: '/demo',
+          ...(smartConfig.enabled ? { bulkPublish: '/$bulk-publish' } : {}),
         },
         hl7Socket: HL7_SOCKET_ENABLED ? {
           port: HL7_SOCKET_PORT,
