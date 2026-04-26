@@ -49,8 +49,8 @@ export function seedDataExists(dataDir: string = './data'): boolean {
 /**
  * Read JSONL file line by line and parse each line as JSON
  */
-async function readJsonlFile(filePath: string): Promise<any[]> {
-  const results: any[] = [];
+async function readJsonlFile(filePath: string): Promise<Record<string, string | number | null>[]> {
+  const results: Record<string, string | number | null>[] = [];
   
   const fileStream = fs.createReadStream(filePath);
   const rl = readline.createInterface({
@@ -130,8 +130,8 @@ export async function importSeedData(store: SqliteStore, dataDir: string = './da
   // Import schedules (shift planning horizon dates)
   const schedules = await readJsonlFile(paths.schedules);
   for (const row of schedules) {
-    if (row.planning_horizon_start) row.planning_horizon_start = shiftDateString(row.planning_horizon_start, offsetDays);
-    if (row.planning_horizon_end) row.planning_horizon_end = shiftDateString(row.planning_horizon_end, offsetDays);
+    if (row.planning_horizon_start) row.planning_horizon_start = shiftDateString(row.planning_horizon_start as string, offsetDays);
+    if (row.planning_horizon_end) row.planning_horizon_end = shiftDateString(row.planning_horizon_end as string, offsetDays);
     await store.importScheduleRow(row);
   }
   console.log(`  ✓ Imported ${schedules.length} schedules`);
@@ -139,8 +139,8 @@ export async function importSeedData(store: SqliteStore, dataDir: string = './da
   // Import slots (shift start/end dates)
   const slots = await readJsonlFile(paths.slots);
   for (const row of slots) {
-    if (row.start) row.start = shiftDateString(row.start, offsetDays);
-    if (row.end) row.end = shiftDateString(row.end, offsetDays);
+    if (row.start) row.start = shiftDateString(row.start as string, offsetDays);
+    if (row.end) row.end = shiftDateString(row.end as string, offsetDays);
     await store.importSlotRow(row);
   }
   console.log(`  ✓ Imported ${slots.length} slots`);
@@ -148,8 +148,8 @@ export async function importSeedData(store: SqliteStore, dataDir: string = './da
   // Import appointments (shift start/end dates)
   const appointments = await readJsonlFile(paths.appointments);
   for (const row of appointments) {
-    if (row.start) row.start = shiftDateString(row.start, offsetDays);
-    if (row.end) row.end = shiftDateString(row.end, offsetDays);
+    if (row.start) row.start = shiftDateString(row.start as string, offsetDays);
+    if (row.end) row.end = shiftDateString(row.end as string, offsetDays);
     await store.importAppointmentRow(row);
   }
   console.log(`  ✓ Imported ${appointments.length} appointments`);

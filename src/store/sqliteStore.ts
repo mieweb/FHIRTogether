@@ -21,6 +21,13 @@ import {
   FhirAppointmentQuery,
 } from '../types/fhir';
 
+/** A row returned from better-sqlite3 queries — values are SQLite primitives */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DbRow = Record<string, any>;
+
+/** SQL parameter values for parameterized queries */
+type SqlParam = string | number | boolean | null | undefined;
+
 /**
  * Format a Date as a naive ISO 8601 string without timezone suffix.
  * e.g. "2026-02-17T08:00:00"
@@ -406,28 +413,28 @@ export class SqliteStore implements FhirStore {
   }
 
   async getSystemById(id: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM systems WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByUrl(url: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE url = ?').get(url) as any;
+    const row = this.db.prepare('SELECT * FROM systems WHERE url = ?').get(url) as DbRow | undefined;
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByMsh(application: string, facility: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE msh_application = ? AND msh_facility = ?').get(application, facility) as any;
+    const row = this.db.prepare('SELECT * FROM systems WHERE msh_application = ? AND msh_facility = ?').get(application, facility) as DbRow | undefined;
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByApiKeyHash(hash: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE api_key_hash = ?').get(hash) as any;
+    const row = this.db.prepare('SELECT * FROM systems WHERE api_key_hash = ?').get(hash) as DbRow | undefined;
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystems(query?: SynapseSystemQuery): Promise<SynapseSystem[]> {
     let sql = 'SELECT * FROM systems WHERE 1=1';
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query?.status) {
       sql += ' AND status = ?';
@@ -441,7 +448,7 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as DbRow[];
     return rows.map(row => this.rowToSystem(row));
   }
 
@@ -450,7 +457,7 @@ export class SqliteStore implements FhirStore {
     if (!existing) throw new Error(`System ${id} not found`);
 
     const setClauses: string[] = [];
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
     if (updates.url !== undefined) { setClauses.push('url = ?'); params.push(updates.url); }
@@ -529,7 +536,7 @@ export class SqliteStore implements FhirStore {
     // Look up by system + HL7 location ID
     const existing = this.db.prepare(
       'SELECT * FROM locations WHERE system_id = ? AND hl7_location_id = ?'
-    ).get(systemId, hl7LocationId) as any;
+    ).get(systemId, hl7LocationId) as DbRow | undefined;
 
     if (existing) return this.rowToLocation(existing);
 
@@ -543,7 +550,7 @@ export class SqliteStore implements FhirStore {
 
   async getLocations(query?: SynapseLocationQuery): Promise<SynapseLocation[]> {
     let sql = 'SELECT * FROM locations WHERE 1=1';
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query?.systemId) {
       sql += ' AND system_id = ?';
@@ -562,12 +569,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as DbRow[];
     return rows.map(row => this.rowToLocation(row));
   }
 
   async getLocationById(id: string): Promise<SynapseLocation | undefined> {
-    const row = this.db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToLocation(row) : undefined;
   }
 
@@ -576,7 +583,7 @@ export class SqliteStore implements FhirStore {
     if (!existing) throw new Error(`Location ${id} not found`);
 
     const setClauses: string[] = [];
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (updates.name !== undefined) { setClauses.push('name = ?'); params.push(updates.name); }
     if (updates.address !== undefined) { setClauses.push('address = ?'); params.push(updates.address); }
@@ -631,7 +638,7 @@ export class SqliteStore implements FhirStore {
 
   async getSchedules(query: FhirScheduleQuery & { system_id?: string }): Promise<Schedule[]> {
     let sql = 'SELECT s.*, sys.name AS system_name FROM schedules s LEFT JOIN systems sys ON s.system_id = sys.id WHERE 1=1';
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query.active !== undefined) {
       sql += ' AND s.active = ?';
@@ -658,12 +665,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as DbRow[];
     return rows.map((row) => this.rowToSchedule(row));
   }
 
   async getScheduleById(id: string): Promise<Schedule | null> {
-    const row = this.db.prepare('SELECT * FROM schedules WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM schedules WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToSchedule(row) : null;
   }
 
@@ -709,7 +716,7 @@ export class SqliteStore implements FhirStore {
   /**
    * Import a raw schedule row from seed data (bypasses normal creation logic)
    */
-  async importScheduleRow(row: any): Promise<void> {
+  async importScheduleRow(row: DbRow): Promise<void> {
     const stmt = this.db.prepare(`
       INSERT INTO schedules (
         id, active, service_category, service_type, specialty, actor,
@@ -767,7 +774,7 @@ export class SqliteStore implements FhirStore {
 
   async getSlots(query: FhirSlotQuery): Promise<Slot[]> {
     let sql = 'SELECT * FROM slots WHERE 1=1';
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query.schedule) {
       const scheduleId = this.extractId(query.schedule);
@@ -797,12 +804,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as DbRow[];
     return rows.map((row) => this.rowToSlot(row));
   }
 
   async getSlotById(id: string): Promise<Slot | null> {
-    const row = this.db.prepare('SELECT * FROM slots WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM slots WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToSlot(row) : null;
   }
 
@@ -849,7 +856,7 @@ export class SqliteStore implements FhirStore {
   /**
    * Import a raw slot row from seed data (bypasses normal creation logic)
    */
-  async importSlotRow(row: any): Promise<void> {
+  async importSlotRow(row: DbRow): Promise<void> {
     const stmt = this.db.prepare(`
       INSERT INTO slots (
         id, schedule_id, status, start, end, service_category, service_type,
@@ -924,7 +931,7 @@ export class SqliteStore implements FhirStore {
 
   async getAppointments(query: FhirAppointmentQuery): Promise<Appointment[]> {
     let sql = 'SELECT * FROM appointments WHERE 1=1';
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query.status) {
       sql += ' AND status = ?';
@@ -962,12 +969,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as any[];
+    const rows = this.db.prepare(sql).all(...params) as DbRow[];
     return rows.map((row) => this.rowToAppointment(row));
   }
 
   async getAppointmentById(id: string): Promise<Appointment | null> {
-    const row = this.db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as any;
+    const row = this.db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as DbRow | undefined;
     return row ? this.rowToAppointment(row) : null;
   }
 
@@ -1023,7 +1030,7 @@ export class SqliteStore implements FhirStore {
   /**
    * Import a raw appointment row from seed data (bypasses normal creation logic)
    */
-  async importAppointmentRow(row: any): Promise<void> {
+  async importAppointmentRow(row: DbRow): Promise<void> {
     const stmt = this.db.prepare(`
       INSERT INTO appointments (
         id, status, cancelation_reason, service_category, service_type,
@@ -1114,7 +1121,7 @@ export class SqliteStore implements FhirStore {
     const now = toNaiveISO(new Date());
     const row = this.db.prepare(
       'SELECT * FROM slot_holds WHERE slot_id = ? AND expires_at > ?'
-    ).get(slotId, now) as any;
+    ).get(slotId, now) as DbRow | undefined;
 
     return row ? this.rowToSlotHold(row) : null;
   }
@@ -1122,7 +1129,7 @@ export class SqliteStore implements FhirStore {
   async getHoldByToken(holdToken: string): Promise<SlotHold | null> {
     const row = this.db.prepare(
       'SELECT * FROM slot_holds WHERE hold_token = ?'
-    ).get(holdToken) as any;
+    ).get(holdToken) as DbRow | undefined;
 
     return row ? this.rowToSlotHold(row) : null;
   }
@@ -1158,7 +1165,7 @@ export class SqliteStore implements FhirStore {
 
   async getHL7MessageLog(query?: HL7MessageLogQuery): Promise<HL7MessageLogEntry[]> {
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: SqlParam[] = [];
 
     if (query?.source) {
       conditions.push('source = ?');
@@ -1182,7 +1189,7 @@ export class SqliteStore implements FhirStore {
 
     const rows = this.db.prepare(
       `SELECT * FROM hl7_message_log ${where} ORDER BY received_at DESC LIMIT ?`
-    ).all(...params, limit) as any[];
+    ).all(...params, limit) as DbRow[];
 
     return rows.map(row => this.rowToHL7LogEntry(row));
   }
@@ -1205,7 +1212,7 @@ export class SqliteStore implements FhirStore {
     return reference.split('/').pop() || reference;
   }
 
-  private rowToSchedule(row: any): Schedule {
+  private rowToSchedule(row: DbRow): Schedule {
     const schedule: Schedule = {
       resourceType: 'Schedule',
       id: row.id,
@@ -1224,7 +1231,7 @@ export class SqliteStore implements FhirStore {
 
     // Include system name as a FHIR extension when available
     if (row.system_name) {
-      (schedule as any).extension = [{
+      (schedule as Schedule & { extension?: unknown[] }).extension = [{
         url: 'https://fhirtogether.org/fhir/StructureDefinition/system-name',
         valueString: row.system_name,
       }];
@@ -1233,7 +1240,7 @@ export class SqliteStore implements FhirStore {
     return schedule;
   }
 
-  private rowToSlot(row: any): Slot {
+  private rowToSlot(row: DbRow): Slot {
     return {
       resourceType: 'Slot',
       id: row.id,
@@ -1251,7 +1258,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
-  private rowToAppointment(row: any): Appointment {
+  private rowToAppointment(row: DbRow): Appointment {
     return {
       resourceType: 'Appointment',
       id: row.id,
@@ -1276,7 +1283,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
-  private rowToSlotHold(row: any): SlotHold {
+  private rowToSlotHold(row: DbRow): SlotHold {
     return {
       id: row.id,
       slotId: row.slot_id,
@@ -1287,7 +1294,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
-  private rowToHL7LogEntry(row: any): HL7MessageLogEntry {
+  private rowToHL7LogEntry(row: DbRow): HL7MessageLogEntry {
     return {
       id: row.id,
       receivedAt: row.received_at,
@@ -1303,7 +1310,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
-  private rowToSystem(row: any): SynapseSystem {
+  private rowToSystem(row: DbRow): SynapseSystem {
     return {
       id: row.id,
       name: row.name,
@@ -1317,7 +1324,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
-  private rowToLocation(row: any): SynapseLocation {
+  private rowToLocation(row: DbRow): SynapseLocation {
     return {
       id: row.id,
       systemId: row.system_id,
@@ -1332,6 +1339,7 @@ export class SqliteStore implements FhirStore {
     };
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private parseJson(value: string | null): any {
     if (!value) return undefined;
     try {

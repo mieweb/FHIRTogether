@@ -5,8 +5,8 @@
  * Locations are auto-created from AIL segments in HL7, or manually via these endpoints.
  */
 
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { FhirStore, Bundle } from '../types/fhir';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { FhirStore, Bundle, FhirResource } from '../types/fhir';
 
 export async function locationRoutes(fastify: FastifyInstance, store: FhirStore) {
 
@@ -73,7 +73,7 @@ export async function locationRoutes(fastify: FastifyInstance, store: FhirStore)
         200: { type: 'object', additionalProperties: true },
       },
     },
-  }, async (request: FastifyRequest<{ Querystring: { zip?: string; _count?: string } }>, _reply: FastifyReply) => {
+  }, async (request: FastifyRequest<{ Querystring: { zip?: string; _count?: string } }>) => {
     const systemId = request.system?.id;
 
     const locations = await store.getLocations({
@@ -100,7 +100,7 @@ export async function locationRoutes(fastify: FastifyInstance, store: FhirStore)
             postalCode: loc.zip,
           } : undefined,
           telecom: loc.phone ? [{ system: 'phone', value: loc.phone }] : undefined,
-        } as any,
+        } as FhirResource,
       })),
     };
 

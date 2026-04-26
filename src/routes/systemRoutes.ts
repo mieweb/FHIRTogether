@@ -9,7 +9,7 @@
 
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
-import { FhirStore } from '../types/fhir';
+import { FhirStore, SystemStatus } from '../types/fhir';
 import { generateApiKey, hashApiKey } from '../auth/apiKeyAuth';
 
 export async function systemRoutes(fastify: FastifyInstance, store: FhirStore) {
@@ -298,7 +298,7 @@ export async function systemRoutes(fastify: FastifyInstance, store: FhirStore) {
     }
 
     const updated = await store.updateSystem(system.id, {
-      status: request.body.status as any,
+      status: request.body.status as SystemStatus,
     });
 
     return { system: updated };

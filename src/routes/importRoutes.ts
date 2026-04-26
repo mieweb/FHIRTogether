@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { FhirStore, Schedule, Slot, Appointment, Bundle } from '../types/fhir';
+import { FhirStore, Schedule, Slot, Appointment, Bundle, FhirResource } from '../types/fhir';
 
 /**
  * Import data payload structure
@@ -34,14 +34,14 @@ function extractResources<T>(data: T[] | Bundle | undefined, resourceType: strin
   // Check if it's a Bundle
   if ('resourceType' in data && data.resourceType === 'Bundle' && 'entry' in data) {
     return (data.entry || [])
-      .map((entry: any) => entry.resource)
-      .filter((resource: any) => resource && resource.resourceType === resourceType);
+      .map((entry) => entry.resource as unknown as T)
+      .filter((resource): resource is T => !!resource && (resource as unknown as FhirResource).resourceType === resourceType);
   }
 
   // Otherwise treat as array
   if (Array.isArray(data)) {
-    return data.filter((resource: any) =>
-      !resource.resourceType || resource.resourceType === resourceType
+    return data.filter((resource: T) =>
+      !(resource as FhirResource).resourceType || (resource as FhirResource).resourceType === resourceType
     );
   }
 

@@ -371,7 +371,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       if (contentType.includes('hl7') || contentType.includes('text/plain')) {
         rawMessage = request.body as string;
       } else if (typeof request.body === 'object' && request.body !== null) {
-        rawMessage = (request.body as any).message || JSON.stringify(request.body);
+        rawMessage = (request.body as Record<string, unknown>).message as string || JSON.stringify(request.body);
       } else {
         rawMessage = String(request.body);
       }

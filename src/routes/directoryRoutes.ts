@@ -7,7 +7,7 @@
  */
 
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import { FhirStore, SystemStatus, Schedule, Bundle } from '../types/fhir';
+import { FhirStore, SystemStatus, Schedule, Bundle, FhirResource } from '../types/fhir';
 
 const SHOW_UNVERIFIED = process.env.DIRECTORY_SHOW_UNVERIFIED === 'true';
 
@@ -117,7 +117,7 @@ export async function directoryRoutes(fastify: FastifyInstance, store: FhirStore
       // Group schedules by location_id
       const schedulesByLocation = new Map<string | null, Schedule[]>();
       for (const sched of filteredSchedules) {
-        const locId = (sched as any).location_id || null;
+        const locId = (sched as Schedule & { location_id?: string }).location_id || null;
         if (!schedulesByLocation.has(locId)) schedulesByLocation.set(locId, []);
         schedulesByLocation.get(locId)!.push(sched);
       }
@@ -188,7 +188,7 @@ function scheduleToProvider(schedule: Schedule): DirectoryProvider {
  * Convert directory entries to a FHIR Bundle of Organization + Location + PractitionerRole.
  */
 function toFhirBundle(entries: DirectoryEntry[]): Bundle {
-  const bundleEntries: Array<{ fullUrl: string; resource: any }> = [];
+  const bundleEntries: Array<{ fullUrl: string; resource: FhirResource & Record<string, unknown> }> = [];
 
   for (const entry of entries) {
     const orgId = `org-${entry.system.name.replace(/\s+/g, '-').toLowerCase()}`;
