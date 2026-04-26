@@ -51,7 +51,7 @@ function toNaiveISO(date: Date): string {
  * The store will compare it against the version stored in the database
  * and report a mismatch so the server can warn or rebuild.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface SchemaStatus {
   current: number;
@@ -259,6 +259,12 @@ export class SqliteStore implements FhirStore {
         this.db.prepare('UPDATE schedules SET system_id = ? WHERE system_id IS NULL').run(legacyId);
         console.log(`\n🔄 Migration v2→v3: Created "Legacy System" (${legacyId}) for ${existingCount} existing schedules\n`);
       }
+    }
+
+    // Migration v4→v5: add availability_template to schedules
+    const schedColsV5 = this.db.pragma('table_info(schedules)') as { name: string }[];
+    if (!schedColsV5.some(c => c.name === 'availability_template')) {
+      this.db.exec('ALTER TABLE schedules ADD COLUMN availability_template TEXT');
     }
 
     // Stamp the schema version after all migrations succeed
@@ -606,7 +612,7 @@ export class SqliteStore implements FhirStore {
 
   // ==================== SCHEDULE OPERATIONS ====================
 
-  async createSchedule(schedule: Schedule & { system_id?: string; location_id?: string }): Promise<Schedule> {
+  async createSchedule(schedule: Schedule & { system_id?: string; location_id?: string; availability_template?: string }): Promise<Schedule> {
     const id = schedule.id || this.generateId();
     const now = toNaiveISO(new Date());
 
@@ -614,8 +620,8 @@ export class SqliteStore implements FhirStore {
       INSERT INTO schedules (
         id, active, service_category, service_type, specialty, actor,
         planning_horizon_start, planning_horizon_end, comment, meta_last_updated,
-        system_id, location_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        system_id, location_id, availability_template
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -631,6 +637,7 @@ export class SqliteStore implements FhirStore {
       now,
       schedule.system_id || null,
       schedule.location_id || null,
+      schedule.availability_template || null,
     );
 
     return { ...schedule, id, meta: { lastUpdated: now } };
@@ -711,6 +718,15 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSchedules(): Promise<void> {
     this.db.prepare('DELETE FROM schedules').run();
+  }
+
+  async setAvailabilityTemplate(scheduleId: string, template: string | null): Promise<void> {
+    this.db.prepare('UPDATE schedules SET availability_template = ? WHERE id = ?').run(template, scheduleId);
+  }
+
+  async getAvailabilityTemplate(scheduleId: string): Promise<string | null> {
+    const row = this.db.prepare('SELECT availability_template FROM schedules WHERE id = ?').get(scheduleId) as { availability_template: string | null } | undefined;
+    return row?.availability_template ?? null;
   }
 
   /**
@@ -863,6 +879,51 @@ export class SqliteStore implements FhirStore {
 
   async deleteAllSlots(): Promise<void> {
     this.db.prepare('DELETE FROM slots').run();
+  }
+
+  async createSlots(slots: Omit<Slot, 'id' | 'meta'>[]): Promise<{ count: number }> {
+    const now = toNaiveISO(new Date());
+    const stmt = this.db.prepare(`
+      INSERT INTO slots (
+        id, schedule_id, status, start, end, service_category, service_type,
+        specialty, appointment_type, overbooked, comment, meta_last_updated
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    const insertAll = this.db.transaction((items: Omit<Slot, 'id' | 'meta'>[]) => {
+      for (const slot of items) {
+        const id = this.generateId();
+        const scheduleId = this.extractId(slot.schedule.reference);
+        stmt.run(
+          id,
+          scheduleId,
+          slot.status,
+          slot.start,
+          slot.end,
+          JSON.stringify(slot.serviceCategory || []),
+          JSON.stringify(slot.serviceType || []),
+          JSON.stringify(slot.specialty || []),
+          JSON.stringify(slot.appointmentType),
+          slot.overbooked ? 1 : 0,
+          slot.comment,
+          now,
+        );
+      }
+    });
+
+    insertAll(slots);
+    return { count: slots.length };
+  }
+
+  async deleteSlotsBySchedule(scheduleId: string, statusFilter?: string): Promise<number> {
+    let sql = 'DELETE FROM slots WHERE schedule_id = ?';
+    const params: SqlParam[] = [scheduleId];
+    if (statusFilter) {
+      sql += ' AND status = ?';
+      params.push(statusFilter);
+    }
+    const result = this.db.prepare(sql).run(...params);
+    return result.changes;
   }
 
   /**
@@ -1263,12 +1324,25 @@ export class SqliteStore implements FhirStore {
       meta: { lastUpdated: row.meta_last_updated },
     };
 
-    // Include system name as a FHIR extension when available
+    // Build FHIR extensions array
+    const extensions: { url: string; valueString?: string }[] = [];
+
     if (row.system_name) {
-      (schedule as Schedule & { extension?: unknown[] }).extension = [{
+      extensions.push({
         url: 'https://fhirtogether.org/fhir/StructureDefinition/system-name',
         valueString: row.system_name,
-      }];
+      });
+    }
+
+    if (row.availability_template) {
+      extensions.push({
+        url: 'https://fhirtogether.org/StructureDefinition/availability-template',
+        valueString: row.availability_template,
+      });
+    }
+
+    if (extensions.length > 0) {
+      (schedule as Schedule & { extension?: unknown[] }).extension = extensions;
     }
 
     return schedule;

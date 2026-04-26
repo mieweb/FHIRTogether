@@ -828,7 +828,9 @@ function renderCards() {
       <div class="slot-builder" id="slots-${ex.id}">
         <h3>📅 Generate Slots for <span class="slot-provider-name"></span></h3>
         <p class="slot-builder-desc">
-          Define availability as YAML. Slots are created as <code>free</code> for the schedule returned above.
+          Define availability as <a href="https://github.com/mieweb/FHIRTogether/blob/main/docs/scheduling-models.md#step-2-define-availability-with-the-schedule-yaml-format" target="_blank">Schedule YAML</a>.
+          Supports time blocks, appointment types, and overbooking.
+          Slots are created as <code>free</code> for the schedule returned above.
         </p>
         <textarea class="slot-yaml" id="slot-yaml-${ex.id}" spellcheck="false"
                   aria-label="YAML slot definition for ${ex.title}"></textarea>
@@ -1034,10 +1036,20 @@ function showDeepLinks(id, scheduleRef, actorDisplay, apiKey, appointmentDate) {
       `endDate:   "${endDate}"`,
       `weekdays:  [mon, tue, wed, thu, fri]`,
       ``,
+      `# appointmentTypes:`,
+      `#   - code: OV`,
+      `#     description: "Office Visit"`,
+      `#     duration: 30`,
+      `#   - code: FU`,
+      `#     description: "Follow-Up"`,
+      `#     duration: 15`,
+      ``,
       `blocks:`,
       `  - start: "09:00"`,
       `    end:   "12:00"`,
       `    duration: 30    # minutes per slot`,
+      `    # overbook: 0   # max concurrent (0 = no overbooking)`,
+      `    # types: [OV, FU]  # allowed appointment types`,
       `  - start: "13:00"`,
       `    end:   "17:00"`,
       `    duration: 30`,
@@ -1065,59 +1077,72 @@ function toggleSlotBuilder(id) {
 
 /**
  * Minimal YAML-ish parser for the slot definition format.
- * Supports: key: "value", key: [a, b, c], nested blocks with - start/end/duration.
+ * Supports: key: "value", key: [a, b, c], nested blocks with - start/end/duration,
+ * appointmentTypes list, and per-block overbook/types fields.
  */
 function parseSlotYAML(text) {
   const lines = text.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
-  const result = { blocks: [] };
-  let inBlocks = false;
-  let currentBlock = null;
+  const result = { blocks: [], appointmentTypes: [] };
+  let section = null; // 'blocks' | 'appointmentTypes'
+  let currentItem = null;
+
+  function flushItem() {
+    if (!currentItem) return;
+    if (section === 'blocks') result.blocks.push(currentItem);
+    else if (section === 'appointmentTypes') result.appointmentTypes.push(currentItem);
+    currentItem = null;
+  }
+
+  function parseValue(raw) {
+    const val = raw.trim();
+    if (val.startsWith('[') && val.endsWith(']')) {
+      return val.slice(1, -1).split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+    }
+    return val.replace(/^"(.*)"$/, '$1');
+  }
 
   for (const line of lines) {
     const trimmed = line.trim();
 
-    if (trimmed === 'blocks:') { inBlocks = true; continue; }
+    if (trimmed === 'blocks:') { flushItem(); section = 'blocks'; continue; }
+    if (trimmed === 'appointmentTypes:') { flushItem(); section = 'appointmentTypes'; continue; }
 
-    if (inBlocks) {
+    if (section) {
       if (trimmed.startsWith('- ')) {
-        if (currentBlock) result.blocks.push(currentBlock);
-        currentBlock = {};
+        flushItem();
+        currentItem = {};
         const kv = trimmed.slice(2).trim();
-        const m = kv.match(/^(\w+):\s*"?([^"#]+)"?\s*/);
-        if (m) currentBlock[m[1]] = m[2].trim();
-      } else if (trimmed.match(/^\w+:/) && currentBlock) {
-        const m = trimmed.match(/^(\w+):\s*"?([^"#]+)"?\s*/);
-        if (m) currentBlock[m[1]] = m[2].trim();
+        const m = kv.match(/^(\w+):\s*(.+?)\s*(?:#.*)?$/);
+        if (m) currentItem[m[1]] = parseValue(m[2]);
+      } else if (trimmed.match(/^\w+:/) && currentItem) {
+        const m = trimmed.match(/^(\w+):\s*(.+?)\s*(?:#.*)?$/);
+        if (m) currentItem[m[1]] = parseValue(m[2]);
       } else if (!trimmed.startsWith(' ') && !trimmed.startsWith('-')) {
-        // End of blocks section
-        if (currentBlock) { result.blocks.push(currentBlock); currentBlock = null; }
-        inBlocks = false;
+        flushItem();
+        section = null;
       }
     }
 
-    if (!inBlocks) {
-      // Top-level key-value
+    if (!section) {
       const kvMatch = trimmed.match(/^(\w+):\s*(.+)/);
       if (kvMatch) {
         const key = kvMatch[1];
-        let val = kvMatch[2].trim();
-        // Array syntax: [mon, tue, ...]
-        if (val.startsWith('[') && val.endsWith(']')) {
-          val = val.slice(1, -1).split(',').map(s => s.trim().toLowerCase());
-        } else {
-          val = val.replace(/^"(.*)"$/, '$1');
-        }
-        result[key] = val;
+        result[key] = parseValue(kvMatch[2]);
       }
     }
   }
-  if (currentBlock) result.blocks.push(currentBlock);
+  flushItem();
+  // Normalize weekdays to lowercase
+  if (Array.isArray(result.weekdays)) {
+    result.weekdays = result.weekdays.map(d => d.toLowerCase());
+  }
   return result;
 }
 
 /**
  * Expand a parsed slot YAML definition into individual Slot resource bodies.
- * Returns an array of { schedule, status, start, end } objects.
+ * Returns an array of Slot objects with optional appointmentType, overbooked,
+ * and serviceType fields based on the YAML appointmentTypes and block config.
  */
 function expandSlots(parsed, scheduleRef) {
   const dayMap = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
@@ -1126,27 +1151,57 @@ function expandSlots(parsed, scheduleRef) {
   const endDate = new Date(parsed.endDate + 'T00:00:00');
   const slots = [];
 
+  // Build a lookup for appointment types by code
+  const typeMap = {};
+  for (const t of (parsed.appointmentTypes || [])) {
+    typeMap[t.code] = t;
+  }
+
   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     if (!weekdays.includes(d.getDay())) continue;
     const dateStr = d.toISOString().slice(0, 10);
 
     for (const block of parsed.blocks) {
       const duration = parseInt(block.duration, 10) || 30;
+      const overbook = parseInt(block.overbook, 10);
       const [startH, startM] = block.start.split(':').map(Number);
       const [endH, endM] = block.end.split(':').map(Number);
       const blockStartMin = startH * 60 + startM;
       const blockEndMin = endH * 60 + endM;
 
+      // Determine allowed appointment types for this block
+      const blockTypes = Array.isArray(block.types) ? block.types : null;
+
       for (let min = blockStartMin; min + duration <= blockEndMin; min += duration) {
         const slotStart = `${dateStr}T${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}:00`;
         const slotEnd = `${dateStr}T${String(Math.floor((min+duration)/60)).padStart(2,'0')}:${String((min+duration)%60).padStart(2,'0')}:00`;
-        slots.push({
+        const slot = {
           resourceType: 'Slot',
           schedule: { reference: scheduleRef },
           status: 'free',
           start: slotStart,
           end: slotEnd,
-        });
+        };
+
+        // Add appointmentType from first allowed type if defined
+        if (blockTypes && blockTypes.length > 0) {
+          const primary = typeMap[blockTypes[0]];
+          if (primary) {
+            slot.appointmentType = { text: primary.description || primary.code };
+          }
+          // Store all allowed types as serviceType
+          slot.serviceType = blockTypes
+            .map(code => typeMap[code] ? { text: typeMap[code].description || code } : { text: code })
+            .filter(Boolean);
+        }
+
+        // Add overbooking if configured
+        if (overbook > 0) {
+          slot.overbooked = false; // Slot is not yet overbooked, but allows it
+          slot.comment = `overbook:${overbook}`;
+        }
+
+        slots.push(slot);
       }
     }
   }
@@ -1175,6 +1230,7 @@ async function createSlots(id) {
     headers['Authorization'] = `Bearer ${apiKey}`;
   }
 
+  // Quick client-side pre-validation for immediate feedback
   let parsed;
   try {
     parsed = parseSlotYAML(yamlText);
@@ -1188,56 +1244,70 @@ async function createSlots(id) {
     return;
   }
 
-  const slots = expandSlots(parsed, scheduleRef);
-  if (slots.length === 0) {
-    status.textContent = 'No slots generated — check date range and weekdays';
-    return;
-  }
-
   btn.disabled = true;
-  status.textContent = `Creating ${slots.length} slots…`;
+  status.textContent = 'Generating slots on server…';
   resultEl.classList.remove('visible');
 
-  let created = 0;
-  let failed = 0;
-  const errors = [];
+  // Extract schedule ID from reference (e.g. "Schedule/abc-123" → "abc-123")
+  const scheduleId = scheduleRef.replace(/^Schedule\//, '');
 
-  for (const slot of slots) {
-    try {
-      const res = await fetch('/Slot', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(slot),
-      });
-      if (res.ok) {
-        created++;
-      } else {
-        failed++;
-        const body = await res.text();
-        if (errors.length < 3) errors.push(`${res.status}: ${body}`);
-      }
-    } catch (e) {
-      failed++;
-      if (errors.length < 3) errors.push(e.message);
+  try {
+    const res = await fetch(`/Schedule/${encodeURIComponent(scheduleId)}/$generate-slots`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ yaml: yamlText }),
+    });
+
+    const body = await res.json();
+
+    btn.disabled = false;
+
+    if (!res.ok) {
+      const errorMsg = body.error || 'Server error';
+      const details = body.details ? body.details.join('; ') : '';
+      status.textContent = `❌ ${errorMsg}`;
+      resultEl.textContent = details || JSON.stringify(body, null, 2);
+      resultEl.className = 'slot-result visible response-error';
+      return;
     }
-    // Update progress every 10 slots
-    if ((created + failed) % 10 === 0) {
-      status.textContent = `Creating slots… ${created + failed}/${slots.length}`;
+
+    // Parse result from OperationOutcome extensions
+    const resultExt = (body.extension || []).find(e => e.url?.includes('generate-slots-result'));
+    const extMap = {};
+    for (const e of (resultExt?.extension || [])) {
+      extMap[e.url] = e.valueInteger ?? e.valueString ?? e.value;
     }
+
+    const created = extMap.slotsCreated || 0;
+    const deleted = extMap.slotsDeleted || 0;
+    const warnings = extMap.warnings || '';
+
+    status.textContent = `✅ Created ${created} slots` +
+      (deleted > 0 ? ` (replaced ${deleted} old free slots)` : '') +
+      (warnings ? ` ⚠️ ${warnings}` : '');
+
+    let detail = `${created} free slots for ${scheduleRef}\n`;
+    detail += `Date range: ${parsed.startDate} → ${parsed.endDate}\n`;
+    detail += `Blocks: ${parsed.blocks.map(b => {
+      let desc = `${b.start}–${b.end} (${b.duration}min)`;
+      if (Array.isArray(b.types)) desc += ` [${b.types.join(', ')}]`;
+      if (parseInt(b.overbook, 10) > 0) desc += ` overbook:${b.overbook}`;
+      return desc;
+    }).join(', ')}`;
+    if (parsed.appointmentTypes.length) {
+      detail += `\nTypes: ${parsed.appointmentTypes.map(t => `${t.code} (${t.description})`).join(', ')}`;
+    }
+    if (warnings) detail += `\n\nWarnings: ${warnings}`;
+    detail += `\n\nTemplate saved on schedule for future regeneration.`;
+
+    resultEl.textContent = detail;
+    resultEl.className = 'slot-result visible response-success';
+  } catch (e) {
+    btn.disabled = false;
+    status.textContent = `❌ Network error: ${e.message}`;
+    resultEl.textContent = e.stack || e.message;
+    resultEl.className = 'slot-result visible response-error';
   }
-
-  btn.disabled = false;
-
-  const summary = `✅ Created ${created} slots` + (failed ? ` · ❌ ${failed} failed` : '');
-  status.textContent = summary;
-
-  let detail = `${created} free slots for ${scheduleRef}\n`;
-  detail += `Date range: ${parsed.startDate} → ${parsed.endDate}\n`;
-  detail += `Blocks: ${parsed.blocks.map(b => `${b.start}–${b.end} (${b.duration}min)`).join(', ')}`;
-  if (errors.length) detail += `\n\nErrors:\n${errors.join('\n')}`;
-
-  resultEl.textContent = detail;
-  resultEl.className = 'slot-result visible ' + (failed ? 'response-error' : 'response-success');
 }
 
 async function sendAll() {
