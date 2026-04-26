@@ -12,6 +12,8 @@
     "import-seed": "tsx src/examples/importSeedData.ts",
     "hl7-test": "tsx src/examples/testHL7.ts",
     "validate-smart": "tsx src/examples/validateSmartScheduling.ts",
+    "inferno:up": "docker compose -f docker-compose.inferno.yml up -d --build",
+    "inferno:down": "docker compose -f docker-compose.inferno.yml down",
     "test": "jest --forceExit && playwright test",
     "test:unit": "jest --forceExit",
     "test:e2e": "playwright test",

@@ -179,8 +179,12 @@ export async function smartSchedulingRoutes(
           id: schedule.id,
           actor: schedule.actor,
         };
-        if (schedule.serviceType) resource.serviceType = schedule.serviceType;
-        if (schedule.serviceCategory) resource.serviceCategory = schedule.serviceCategory;
+        if (schedule.serviceType && (!Array.isArray(schedule.serviceType) || schedule.serviceType.length > 0)) {
+          resource.serviceType = schedule.serviceType;
+        }
+        if (schedule.serviceCategory && (!Array.isArray(schedule.serviceCategory) || schedule.serviceCategory.length > 0)) {
+          resource.serviceCategory = schedule.serviceCategory;
+        }
         return resource;
       });
 
@@ -210,13 +214,18 @@ export async function smartSchedulingRoutes(
       const ndjsonLines = slots.map(slot => {
         // SMART Scheduling Links spec only recognizes "free" and "busy"
         const status = slot.status === 'free' ? 'free' : 'busy';
+        // FHIR instant requires timezone — ensure UTC suffix
+        const start = slot.start && !slot.start.endsWith('Z') && !(/[+-]\d{2}:\d{2}$/.test(slot.start))
+          ? slot.start + 'Z' : slot.start;
+        const end = slot.end && !slot.end.endsWith('Z') && !(/[+-]\d{2}:\d{2}$/.test(slot.end))
+          ? slot.end + 'Z' : slot.end;
         const resource: Record<string, unknown> = {
           resourceType: 'Slot',
           id: slot.id,
           schedule: slot.schedule,
           status,
-          start: slot.start,
-          end: slot.end,
+          start,
+          end,
         };
 
         // Add booking deep link extension if configured

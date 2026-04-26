@@ -169,28 +169,49 @@ The Inferno test suite validates resources against **vaccine-specific** FHIR pro
 
 These are **not bugs** — they reflect the difference between a general scheduling platform and a vaccine-specific publisher. The core specification structural checks (manifest, NDJSON format, required FHIR fields) all pass.
 
-## Automated Validation
+## Automated Validation (Inferno Test Suite)
 
-Run the built-in Inferno-style validation against a running server:
+Run the **actual Inferno SMART Scheduling Links test suite** against a running server via Docker:
 
 ```bash
-# Start the server
-npm start &
+# 1. Start FHIRTogether
+npm run dev &
 
-# Run validation (defaults to http://localhost:4010/$bulk-publish)
+# 2. Start the Inferno test kit (first run builds the image)
+npm run inferno:up
+
+# 3. Wait ~30s for Inferno to start, then run tests
+#    Uses host.docker.internal so Inferno's Docker container can reach your host
 npm run validate-smart
 
-# Or specify a custom URL
-npx tsx src/examples/validateSmartScheduling.ts https://your-server.example.com/\$bulk-publish
+# 4. Open the Inferno UI to see detailed results
+open http://localhost:8080
 ```
 
-The script checks:
-- Manifest URL form, download, and JSON structure
-- `transactionTime` format (FHIR instant)
-- `Cache-Control` header presence
-- All NDJSON files downloadable and parseable
-- Resource-level field validation (type-specific checks)
-- State extension presence (optional)
+### Using the hosted Inferno (requires public URL)
+
+If your server is publicly accessible (e.g., via ngrok), you can skip Docker and test against the hosted Inferno at inferno.healthit.gov:
+
+```bash
+npx tsx src/examples/validateSmartScheduling.ts \
+  https://your-server.example.com/\$bulk-publish \
+  --inferno https://inferno.healthit.gov
+```
+
+### Configuration
+
+| Variable | Default | Description |
+|---|---|---|
+| `INFERNO_URL` | `http://localhost:8080` | Inferno instance base URL |
+| `BULK_PUBLISH_URL` | `http://host.docker.internal:4010/$bulk-publish` | `$bulk-publish` URL for Inferno to fetch |
+| `INFERNO_POLL_INTERVAL` | `2` | Seconds between result polls |
+| `INFERNO_TIMEOUT` | `120` | Max seconds to wait for test run |
+
+### Cleanup
+
+```bash
+npm run inferno:down
+```
 
 ## Links
 

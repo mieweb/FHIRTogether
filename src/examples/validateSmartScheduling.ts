@@ -1,293 +1,185 @@
 /**
- * SMART Scheduling Links — Inferno-Style Validation
+ * SMART Scheduling Links — Inferno Test Runner
  *
- * Automated script that mirrors the checks performed by the Inferno
- * SMART Scheduling Links test suite (v0.4.0):
- *   - Manifest URL form (1.01)
- *   - Manifest download (1.02)
- *   - Cache-Control header (optional)
- *   - Manifest structure (1.04)
- *   - State extensions (optional)
- *   - Location resource retrieval & validation
- *   - Schedule resource retrieval & validation
- *   - Slot resource retrieval & validation
+ * Drives the actual Inferno SMART Scheduling Links test suite via its REST API.
+ * Can target either a local Inferno instance (via Docker) or the hosted
+ * Inferno at inferno.healthit.gov.
  *
  * Usage:
- *   npx ts-node src/examples/validateSmartScheduling.ts [URL]
+ *   # Against local Inferno (docker compose -f docker-compose.inferno.yml up -d)
+ *   npx tsx src/examples/validateSmartScheduling.ts http://host.docker.internal:4010/\$bulk-publish
  *
- *   URL defaults to http://localhost:4010/$bulk-publish
+ *   # Against hosted Inferno (server must be publicly accessible)
+ *   npx tsx src/examples/validateSmartScheduling.ts https://your-server.example.com/\$bulk-publish --inferno https://inferno.healthit.gov
+ *
+ * Environment variables:
+ *   INFERNO_URL    — Inferno base URL (default: http://localhost:8080)
+ *   BULK_PUBLISH_URL — $bulk-publish URL to test (default: arg[0] or http://host.docker.internal:4010/$bulk-publish)
+ *   INFERNO_POLL_INTERVAL — Seconds between status polls (default: 2)
+ *   INFERNO_TIMEOUT — Max seconds to wait for test completion (default: 120)
  */
 
-const MANIFEST_URL = process.argv[2] || 'http://localhost:4010/$bulk-publish';
+// ─── Configuration ────────────────────────────────────────────
 
-// FHIR instant regex from the Inferno test kit
-const INSTANT_REGEX =
-  /([0-9]([0-9]([0-9][1-9]|[1-9]0)|[1-9]00)|[1-9]000)-(0[1-9]|1[0-2])-(0[1-9]|[1-2][0-9]|3[0-1])T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\.[0-9]+)?(Z|(\+|-)((0[0-9]|1[0-3]):[0-5][0-9]|14:00))/;
+const args = process.argv.slice(2);
+let bulkPublishUrl = process.env.BULK_PUBLISH_URL || 'http://host.docker.internal:4010/$bulk-publish';
+let infernoUrl = process.env.INFERNO_URL || 'http://localhost:8080';
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--inferno' && args[i + 1]) {
+    infernoUrl = args[++i];
+  } else if (!args[i].startsWith('--')) {
+    bulkPublishUrl = args[i];
+  }
+}
+
+const POLL_INTERVAL = parseInt(process.env.INFERNO_POLL_INTERVAL || '2', 10) * 1000;
+const TIMEOUT = parseInt(process.env.INFERNO_TIMEOUT || '120', 10) * 1000;
+const API = `${infernoUrl}/api`;
+
+const SUITE_ID = 'smart_scheduling_links';
+
+// ─── Types ────────────────────────────────────────────────────
 
 interface TestResult {
   id: string;
-  title: string;
-  status: 'pass' | 'fail' | 'skip' | 'warn';
-  message?: string;
+  test_id?: string;
+  test_group_id?: string;
+  test_suite_id?: string;
+  result: 'pass' | 'fail' | 'skip' | 'omit' | 'error' | 'cancel';
+  result_message?: string;
+  optional?: boolean;
+  messages?: Array<{ type: string; message: string }>;
 }
 
-const results: TestResult[] = [];
+// ─── Helpers ──────────────────────────────────────────────────
 
-function pass(id: string, title: string, message?: string) {
-  results.push({ id, title, status: 'pass', message });
-}
-function fail(id: string, title: string, message: string) {
-  results.push({ id, title, status: 'fail', message });
-}
-function warn(id: string, title: string, message: string) {
-  results.push({ id, title, status: 'warn', message });
+async function apiGet(path: string) {
+  const res = await fetch(`${API}${path}`, {
+    headers: { 'Accept': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`GET ${path}: ${res.status} ${await res.text()}`);
+  return res.json();
 }
 
-function isValidUrl(s: string): boolean {
-  try { new URL(s); return true; } catch { return false; }
+async function apiPost(path: string, body: Record<string, unknown>) {
+  const res = await fetch(`${API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`POST ${path}: ${res.status} ${await res.text()}`);
+  return res.json();
 }
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ─── Main ─────────────────────────────────────────────────────
 
 async function run() {
-  console.log(`\n🔍 SMART Scheduling Links Validation`);
-  console.log(`   Target: ${MANIFEST_URL}\n`);
+  console.log(`\n🔬 Inferno SMART Scheduling Links Test Runner`);
+  console.log(`   Inferno:       ${infernoUrl}`);
+  console.log(`   $bulk-publish: ${bulkPublishUrl}\n`);
 
-  // ── 1.01: URL form ─────────────────────────────────────────
-  if (MANIFEST_URL.endsWith('$bulk-publish') && isValidUrl(MANIFEST_URL)) {
-    pass('1.01', 'Manifest URL ends in $bulk-publish');
-  } else {
-    fail('1.01', 'Manifest URL ends in $bulk-publish',
-      `URL "${MANIFEST_URL}" does not end with $bulk-publish or is not a valid URL`);
-  }
-
-  // ── 1.02: Download manifest ────────────────────────────────
-  let manifest: Record<string, unknown> | null = null;
-  let manifestRes: Response;
+  // 1. Verify Inferno is reachable
   try {
-    manifestRes = await fetch(MANIFEST_URL, {
-      headers: { 'Accept': 'application/json' },
-    });
-
-    if (manifestRes.status !== 200) {
-      fail('1.02', 'Manifest can be downloaded', `HTTP ${manifestRes.status}`);
-    } else {
-      const body = await manifestRes.text();
-      try {
-        manifest = JSON.parse(body);
-        pass('1.02', 'Manifest can be downloaded');
-      } catch {
-        fail('1.02', 'Manifest can be downloaded', 'Response is not valid JSON');
-      }
-    }
+    await apiGet('/test_suites');
+    console.log('✓ Inferno is reachable');
   } catch (err) {
-    fail('1.02', 'Manifest can be downloaded', `Fetch failed: ${err}`);
-    printResults();
-    return;
+    console.error(`✗ Cannot reach Inferno at ${infernoUrl}`);
+    console.error(`  ${err}`);
+    console.error(`\n  To start Inferno locally:`);
+    console.error(`    docker compose -f docker-compose.inferno.yml up -d`);
+    console.error(`    # Wait ~30s for startup, then re-run this script`);
+    process.exit(2);
   }
 
-  if (!manifest) { printResults(); return; }
+  // 2. Create test session
+  console.log(`\nCreating test session for suite: ${SUITE_ID}`);
+  const session = await apiPost('/test_sessions', { test_suite_id: SUITE_ID }) as { id: string };
+  console.log(`  Session ID: ${session.id}`);
 
-  // ── Cache-Control (optional) ───────────────────────────────
-  const cacheControl = manifestRes!.headers.get('cache-control') || '';
-  if (/max-age=\d+/.test(cacheControl)) {
-    pass('opt', 'Cache-Control: max-age header present');
-  } else {
-    warn('opt', 'Cache-Control: max-age header present',
-      'Missing Cache-Control: max-age header (SHOULD per spec)');
-  }
+  // 3. Start test run with our $bulk-publish URL
+  console.log(`\nStarting test run...`);
+  const testRun = await apiPost('/test_runs', {
+    test_session_id: session.id,
+    test_suite_id: SUITE_ID,
+    inputs: [
+      { name: 'url', value: bulkPublishUrl },
+      { name: 'max_lines_per_file', value: '100' },
+    ],
+  }) as { id: string; status: string };
+  console.log(`  Test Run ID: ${testRun.id}`);
 
-  // ── 1.04: Manifest structure ───────────────────────────────
-  const structureErrors: string[] = [];
+  // 4. Poll for completion
+  const startTime = Date.now();
+  let status = testRun.status;
+  process.stdout.write('  Waiting');
 
-  // transactionTime
-  const tt = manifest.transactionTime;
-  if (typeof tt !== 'string') {
-    structureErrors.push('transactionTime must be a string');
-  } else if (!INSTANT_REGEX.test(tt)) {
-    structureErrors.push(`transactionTime "${tt}" is not in FHIR instant format`);
-  }
-
-  // request
-  const req = manifest.request;
-  if (typeof req !== 'string') {
-    structureErrors.push('request must be a string');
-  } else if (!isValidUrl(req as string)) {
-    structureErrors.push(`request "${req}" is not a valid URL`);
-  }
-
-  // output
-  const output = manifest.output;
-  if (!Array.isArray(output)) {
-    structureErrors.push('output must be an array');
-  } else {
-    const types = new Set<string>();
-    for (const entry of output as Array<Record<string, unknown>>) {
-      if (typeof entry.type !== 'string') structureErrors.push('output[].type must be a string');
-      if (typeof entry.url !== 'string') structureErrors.push('output[].url must be a string');
-      else if (!isValidUrl(entry.url as string)) structureErrors.push(`output URL "${entry.url}" is not valid`);
-      if (entry.extension) {
-        if (typeof entry.extension !== 'object' || Array.isArray(entry.extension)) {
-          structureErrors.push('output[].extension must be a JSON object');
-        } else {
-          const ext = entry.extension as Record<string, unknown>;
-          if (ext.state) {
-            if (!Array.isArray(ext.state)) {
-              structureErrors.push('extension.state must be an array');
-            } else if (!(ext.state as unknown[]).every(s => typeof s === 'string')) {
-              structureErrors.push('extension.state entries must all be strings');
-            }
-          }
-        }
-      }
-      if (typeof entry.type === 'string') types.add(entry.type);
+  while (status === 'running' || status === 'queued' || status === 'waiting') {
+    if (Date.now() - startTime > TIMEOUT) {
+      console.error(`\n\n✗ Timed out after ${TIMEOUT / 1000}s`);
+      process.exit(3);
     }
-    if (!types.has('Location')) structureErrors.push('No Location output entry');
-    if (!types.has('Schedule')) structureErrors.push('No Schedule output entry');
-    if (!types.has('Slot')) structureErrors.push('No Slot output entry');
+    await sleep(POLL_INTERVAL);
+    process.stdout.write('.');
+    const runStatus = await apiGet(`/test_runs/${testRun.id}`) as { status: string };
+    status = runStatus.status;
   }
+  console.log(` ${status}\n`);
 
-  if (structureErrors.length === 0) {
-    pass('1.04', 'Manifest has correct structure');
-  } else {
-    fail('1.04', 'Manifest has correct structure', structureErrors.join('; '));
-  }
+  // 5. Get results
+  const results = await apiGet(`/test_sessions/${session.id}/results`) as TestResult[];
 
-  // ── State extensions (optional) ────────────────────────────
-  if (Array.isArray(output)) {
-    const relevant = (output as Array<Record<string, unknown>>)
-      .filter(o => ['Location', 'Schedule', 'Slot'].includes(o.type as string));
-    const withState = relevant.filter(o => {
-      const ext = o.extension as Record<string, unknown> | undefined;
-      return ext && Array.isArray(ext.state) && (ext.state as unknown[]).length > 0;
-    });
-    if (withState.length === relevant.length) {
-      pass('opt', 'All outputs include state extension');
-    } else {
-      warn('opt', 'All outputs include state extension',
-        `${withState.length}/${relevant.length} outputs include state extension (SHOULD per spec)`);
+  // Filter to individual test results (not group/suite summaries)
+  const testResults = results.filter(r => r.test_id);
+
+  // 6. Print results
+  const icons: Record<string, string> = {
+    pass: '✅', fail: '❌', skip: '⏭️ ', omit: '⬜', error: '💥', cancel: '🚫',
+  };
+
+  console.log('━'.repeat(80));
+  console.log(' Inferno Test Results');
+  console.log('━'.repeat(80));
+
+  const counts: Record<string, number> = {};
+  for (const r of testResults) {
+    const icon = icons[r.result] || '❓';
+    const opt = r.optional ? ' (optional)' : '';
+    const testId = r.test_id || r.id;
+    console.log(`  ${icon} ${testId}${opt}`);
+    if (r.result_message) {
+      const msg = r.result_message.length > 200
+        ? r.result_message.slice(0, 200) + '...'
+        : r.result_message;
+      console.log(`     ${msg}`);
     }
-  }
-
-  // ── Resource retrieval ─────────────────────────────────────
-  const outputArr = output as Array<Record<string, unknown>>;
-  // Derive the base URL from the manifest URL to resolve NDJSON links
-  const manifestBase = MANIFEST_URL.replace(/\/\$bulk-publish$/, '');
-  for (const entry of outputArr) {
-    const type = entry.type as string;
-    let url = entry.url as string;
-    if (!['Location', 'Schedule', 'Slot'].includes(type)) continue;
-
-    // Normalize URL: if the manifest uses a different host (e.g. 0.0.0.0),
-    // replace it with the host we used to reach the manifest.
-    try {
-      const entryUrl = new URL(url);
-      const baseUrl = new URL(manifestBase);
-      if (entryUrl.hostname !== baseUrl.hostname || entryUrl.port !== baseUrl.port) {
-        entryUrl.hostname = baseUrl.hostname;
-        entryUrl.port = baseUrl.port;
-        entryUrl.protocol = baseUrl.protocol;
-        url = entryUrl.toString();
+    if (r.messages) {
+      for (const m of r.messages.slice(0, 3)) {
+        const mIcon = m.type === 'error' ? '  ⚠' : '  ℹ';
+        const mMsg = m.message.length > 150 ? m.message.slice(0, 150) + '...' : m.message;
+        console.log(`    ${mIcon} ${mMsg}`);
       }
-    } catch { /* keep original URL */ }
-
-    try {
-      const res = await fetch(url, {
-        headers: { 'Accept': 'application/fhir+ndjson' },
-      });
-
-      if (res.status !== 200) {
-        fail(`res.${type}`, `${type} NDJSON retrieval`, `HTTP ${res.status} from ${url}`);
-        continue;
-      }
-
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('ndjson')) {
-        warn(`res.${type}`, `${type} NDJSON content-type`, `Expected application/fhir+ndjson, got "${ct}"`);
-      }
-
-      const body = await res.text();
-      const lines = body.split('\n').filter(Boolean);
-
-      if (lines.length === 0) {
-        warn(`res.${type}`, `${type} NDJSON retrieval`, 'File is empty');
-        continue;
-      }
-
-      let valid = 0;
-      const errors: string[] = [];
-      for (const line of lines.slice(0, 100)) {
-        try {
-          const resource = JSON.parse(line);
-          if (resource.resourceType !== type) {
-            errors.push(`Expected resourceType "${type}", got "${resource.resourceType}"`);
-          }
-          if (!resource.id) errors.push(`Resource missing id`);
-
-          // Type-specific checks
-          if (type === 'Location') {
-            if (!resource.name) errors.push('Location missing name');
-            if (!resource.telecom || !Array.isArray(resource.telecom) || resource.telecom.length === 0) {
-              errors.push('Location missing telecom');
-            }
-          }
-          if (type === 'Schedule') {
-            if (!resource.actor || !Array.isArray(resource.actor)) errors.push('Schedule missing actor');
-          }
-          if (type === 'Slot') {
-            if (!resource.schedule?.reference) errors.push('Slot missing schedule.reference');
-            if (!resource.status) errors.push('Slot missing status');
-            if (!['free', 'busy'].includes(resource.status)) errors.push(`Slot status "${resource.status}" not free/busy`);
-            if (!resource.start) errors.push('Slot missing start');
-            if (!resource.end) errors.push('Slot missing end');
-          }
-
-          valid++;
-        } catch {
-          errors.push('Invalid JSON line');
-        }
-        if (errors.length > 3) break; // stop early on many errors
-      }
-
-      if (errors.length === 0) {
-        pass(`res.${type}`, `${type} resources valid (${valid} checked)`);
-      } else {
-        fail(`res.${type}`, `${type} resource validation`, errors.slice(0, 5).join('; '));
-      }
-    } catch (err) {
-      fail(`res.${type}`, `${type} NDJSON retrieval`, `Fetch failed: ${err}`);
     }
+    counts[r.result] = (counts[r.result] || 0) + 1;
   }
 
-  // ── Known gaps ─────────────────────────────────────────────
-  console.log('\n📋 Known Inferno profile gaps (these are vaccine-specific requirements):');
-  console.log('   • Location: Inferno expects VTrckS PIN identifier (vaccine-location profile)');
-  console.log('   • Schedule: Inferno expects COVID-19 service type coding (vaccine-schedule profile)');
-  console.log('   • These profiles are vaccine-specific; general scheduling data will not match.\n');
+  console.log('━'.repeat(80));
+  const summary = Object.entries(counts)
+    .map(([k, v]) => `${v} ${k}`)
+    .join(', ');
+  console.log(`  ${testResults.length} tests: ${summary}`);
 
-  printResults();
-}
+  const sessionUrl = `${infernoUrl}/test_sessions/${session.id}`;
+  console.log(`\n  Full results: ${sessionUrl}`);
+  console.log('━'.repeat(80));
 
-function printResults() {
-  console.log('━'.repeat(72));
-  console.log(' Test Results');
-  console.log('━'.repeat(72));
-
-  const icons = { pass: '✅', fail: '❌', skip: '⏭️', warn: '⚠️' };
-  let passes = 0, fails = 0, warns = 0;
-
-  for (const r of results) {
-    const icon = icons[r.status];
-    console.log(`  ${icon} [${r.id}] ${r.title}`);
-    if (r.message) console.log(`     ${r.message}`);
-    if (r.status === 'pass') passes++;
-    else if (r.status === 'fail') fails++;
-    else if (r.status === 'warn') warns++;
-  }
-
-  console.log('━'.repeat(72));
-  console.log(`  ${passes} passed, ${fails} failed, ${warns} warnings`);
-  console.log('━'.repeat(72));
-
-  process.exit(fails > 0 ? 1 : 0);
+  // Exit with failure if any required test failed
+  const requiredFails = testResults.filter(r => r.result === 'fail' && !r.optional);
+  process.exit(requiredFails.length > 0 ? 1 : 0);
 }
 
 run().catch(err => {
