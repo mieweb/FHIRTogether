@@ -267,6 +267,67 @@ sequenceDiagram
     HL7-->>EHR: MSA|AA|12345|Success
 ```
 
+## Processing Flow
+
+When FHIRTogether receives an HL7v2 SIU message (via HTTPS or MLLP), it performs these steps:
+
+### 1. System Registration (MSH-3 + MSH-4)
+
+The **MSH-3 (Sending Application)** and **MSH-4 (Sending Facility)** pair together
+uniquely identifies the source system. Both are required because:
+
+- **MSH-4 alone** is insufficient — one hospital may run multiple applications
+  (`LEGACY_EHR`, `RAD_SYSTEM`) with separate practitioner ID namespaces.
+- **MSH-3 alone** is insufficient — the same software may be deployed at multiple
+  facilities (`MAIN_HOSPITAL`, `SATELLITE_CLINIC`) with independent ID spaces.
+
+On first contact, FHIRTogether auto-registers the system:
+
+```mermaid
+flowchart TD
+    Msg[Inbound SIU Message] --> Lookup{System exists for<br/>MSH-3 + MSH-4?}
+    Lookup -- Yes --> Secret{MSH-8 secret<br/>matches?}
+    Lookup -- No --> Register[Create new system<br/>name = App@Facility]
+    Register --> IssueKey[Issue API key]
+    IssueKey --> Process[Process message]
+    Secret -- Yes --> Process
+    Secret -- No --> Reject[ACK AR — rejected]
+```
+
+The system's display name is `{MSH-3}@{MSH-4}` (e.g., `LEGACY_EHR@MAIN_HOSPITAL`).
+
+### 2. Location Registration (AIL segment)
+
+If the message contains an **AIL** (Appointment Information - Location) segment,
+FHIRTogether auto-creates a Location resource scoped to the system.
+
+### 3. Schedule & Slot Creation
+
+Schedule IDs are **scoped to the system** to prevent collisions:
+
+```
+schedule-{systemId}-{practitionerId}
+```
+
+This means practitioner `1` from `LEGACY_EHR@MAIN_HOSPITAL` gets a different
+schedule than practitioner `1` from `CLINIC_EHR@SATELLITE_CLINIC`.
+
+### 4. Appointment Deduplication (SCH-1)
+
+The **SCH-1 (Placer Appointment ID)** is used to deduplicate appointments.
+If an appointment with the same placer ID already exists, it is **updated**
+rather than duplicated. This handles retransmissions and modifications.
+
+### 5. FHIR Resource Mapping
+
+| HL7 Segment | FHIR Resource | Key Fields |
+|-------------|---------------|------------|
+| SCH | Appointment | status, start, end, identifier |
+| PID | Appointment.participant | Patient reference (redacted on read) |
+| PV1/AIP | Schedule.actor | Practitioner reference |
+| AIL | Location | Name, address |
+| AIG | Schedule.actor | Practitioner resource group |
+
 ## Error Handling
 
 The module returns appropriate HL7 ACK codes:

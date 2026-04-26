@@ -13,6 +13,10 @@ export interface FhirResource {
     versionId?: string;
     lastUpdated?: string;
   };
+  extension?: Array<{
+    url: string;
+    valueString?: string;
+  }>;
 }
 
 export interface Reference {

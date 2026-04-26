@@ -55,6 +55,16 @@ function getServiceType(schedule: Schedule): string | null {
   return null;
 }
 
+/**
+ * Extract system name from Schedule extension
+ */
+function getSystemName(schedule: Schedule): string {
+  const ext = schedule.extension?.find(
+    (e) => e.url === 'https://fhirtogether.org/fhir/StructureDefinition/system-name'
+  );
+  return ext?.valueString || 'Local';
+}
+
 export function ProviderList({ providers, onSelect, onBack, loading }: ProviderListProps) {
   if (loading) {
     return (
@@ -113,42 +123,61 @@ export function ProviderList({ providers, onSelect, onBack, loading }: ProviderL
       )}
       <h2 className="fs-section-title">Select a Provider</h2>
       <div className="fs-provider-grid">
-        {providers.map((provider) => {
-          const name = getProviderName(provider);
-          const specialty = getSpecialty(provider);
-          const serviceType = getServiceType(provider);
+        {(() => {
+          // Group providers by system name
+          const groups = new Map<string, Schedule[]>();
+          for (const provider of providers) {
+            const sys = getSystemName(provider);
+            const list = groups.get(sys) || [];
+            list.push(provider);
+            groups.set(sys, list);
+          }
+          const showGroups = groups.size > 1;
+
+          return Array.from(groups.entries()).map(([systemName, groupProviders]) => (
+            <React.Fragment key={systemName}>
+              {showGroups && (
+                <h3 className="fs-system-group-title">{systemName}</h3>
+              )}
+              {groupProviders.map((provider) => {
+                const name = getProviderName(provider);
+                const specialty = getSpecialty(provider);
+                const serviceType = getServiceType(provider);
           
-          return (
-            <button
-              key={provider.id}
-              type="button"
-              className="fs-provider-card"
-              onClick={() => onSelect(provider)}
-              aria-label={`Select ${name}${specialty ? `, ${specialty}` : ''}`}
-            >
-              <div className="fs-provider-avatar">
-                <span className="fs-avatar-initials">
-                  {name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase()}
-                </span>
-              </div>
-              <div className="fs-provider-info">
-                <h3 className="fs-provider-name">{name}</h3>
-                {specialty && <p className="fs-provider-specialty">{specialty}</p>}
-                {serviceType && <p className="fs-provider-service">{serviceType}</p>}
-              </div>
-              <div className="fs-provider-status">
-                {provider.active !== false && (
-                  <span className="fs-status-badge fs-status-active">Available</span>
-                )}
-              </div>
-            </button>
-          );
-        })}
+                return (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    className="fs-provider-card"
+                    onClick={() => onSelect(provider)}
+                    aria-label={`Select ${name}${specialty ? `, ${specialty}` : ''}`}
+                  >
+                    <div className="fs-provider-avatar">
+                      <span className="fs-avatar-initials">
+                        {name
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="fs-provider-info">
+                      <h3 className="fs-provider-name">{name}</h3>
+                      {specialty && <p className="fs-provider-specialty">{specialty}</p>}
+                      {serviceType && <p className="fs-provider-service">{serviceType}</p>}
+                    </div>
+                    <div className="fs-provider-status">
+                      {provider.active !== false && (
+                        <span className="fs-status-badge fs-status-active">Available</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </React.Fragment>
+          ));
+        })()}
       </div>
     </div>
   );

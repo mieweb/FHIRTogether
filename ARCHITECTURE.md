@@ -31,7 +31,7 @@ graph TB
     SQLite["SqliteStore — better-sqlite3"]
   end
 
-  subgraph DB["SQLite Database"]
+  subgraph DB["Database"]
     SysTbl["systems"]
     LocTbl["locations"]
     SchedTbl["schedules"]
@@ -72,7 +72,8 @@ erDiagram
         text name
         text url
         text api_key_hash
-        text msh_facility UK
+        text msh_application
+        text msh_facility
         text msh_secret_hash
         text challenge_token
         text status
@@ -122,7 +123,7 @@ erDiagram
 sequenceDiagram
     participant EHR as Legacy EHR
     participant GW as FHIRTogether Gateway
-    participant DB as SQLite
+    participant DB as Database
 
     EHR->>GW: SIU^S12 (MSH-4=HOSPITAL, MSH-8=secret)
     GW->>DB: findOrCreateSystemByMSH("HOSPITAL", "secret")
@@ -188,13 +189,13 @@ stateDiagram-v2
    - Extracts appointment data
           │
           ▼
-3. Store Layer (sqliteStore.ts)
+3. Store Layer
    - Creates appointment record
    - Extracts slot references
    - Updates slot status to "busy"
           │
           ▼
-4. Database (SQLite)
+4. Database
    - INSERT into appointments table
    - UPDATE slots SET status='busy'
           │
@@ -338,13 +339,13 @@ Side Effect: Slot/slot-1 status changed from "free" to "busy"
                     │
 ┌─────────────────────────────────────────────┐
 │              Data Access Layer              │
-│  • Better-SQLite3 (Sync SQLite Driver)      │
-│  • Custom Store Abstraction (FhirStore)     │
+│  • FhirStore interface (pluggable backend)  │
+│  • Default: SqliteStore (better-sqlite3)    │
 └─────────────────────────────────────────────┘
                     │
 ┌─────────────────────────────────────────────┐
 │             Storage Layer                   │
-│  • SQLite3 (Embedded Database)              │
+│  • Pluggable backend (default: SQLite3)     │
 │  • File-based: ./data/fhirtogether.db       │
 └─────────────────────────────────────────────┘
 ```
@@ -395,9 +396,9 @@ server.ts reads config
   ├── EVAPORATION_CHECK_INTERVAL_HOURS (default: 1)
   └── DIRECTORY_SHOW_UNVERIFIED (default: false)
   ↓
-SqliteStore reads SQLITE_DB_PATH
+Store backend reads config (e.g. SQLITE_DB_PATH)
   ↓
-Creates/opens ./data/fhirtogether.db (schema v3)
+Creates/opens database (e.g. ./data/fhirtogether.db)
 ```
 
 ## Busy Office Simulation

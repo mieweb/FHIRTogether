@@ -6,7 +6,7 @@
 
 This is a **FHIR-compliant scheduling gateway** built with:
 - **TypeScript** + **Fastify** for the REST API server
-- **SQLite3** (better-sqlite3) as the default pluggable backend store
+- **Pluggable storage backend** (default: SQLite3 via better-sqlite3)
 - **OpenAPI 3.1 / Swagger UI** for API documentation
 - **FHIR R4** resource types: Schedule, Slot, Appointment
 

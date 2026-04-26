@@ -92,7 +92,7 @@ FHIRTogether/
 │   │   └── README.md             # Example documentation
 │   └── server.ts                 # Main server entry point
 ├── data/
-│   └── fhirtogether.db          # SQLite database (auto-created)
+│   └── fhirtogether.db          # Database file (auto-created)
 ├── package.json
 ├── tsconfig.json
 ├── .env                          # Environment configuration
@@ -171,7 +171,7 @@ PORT=4010
 HOST=0.0.0.0
 LOG_LEVEL=info
 
-# SQLite Configuration
+# Database Configuration
 SQLITE_DB_PATH=./data/fhirtogether.db
 
 # Enable test/admin endpoints (DELETE operations)
