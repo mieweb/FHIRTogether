@@ -15,7 +15,7 @@ import {
   createACKResponse,
   wrapMLLP,
 } from '../hl7/parser';
-import { siuToFhirResources } from '../hl7/converter';
+import { siuToFhirResources, siuToScheduleReference } from '../hl7/converter';
 
 /**
  * Find an existing appointment by its placer appointment ID.
@@ -196,10 +196,11 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
       // Parse the full SIU message
       const siuMessage = parseSIUMessage(rawMessage);
       
-      // ── Auto-register system from MSH-4/MSH-8 ──
+      // ── Auto-register system from MSH-3+MSH-4 / MSH-8 ──
+      const application = siuMessage.msh.sendingApplication;
       const facility = siuMessage.msh.sendingFacility;
       const secret = siuMessage.msh.security || '';
-      const mshResult = await store.findOrCreateSystemByMSH(facility, secret);
+      const mshResult = await store.findOrCreateSystemByMSH(application, facility, secret);
 
       if (!mshResult.secretMatch) {
         const ack = createACKResponse(
@@ -233,17 +234,20 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
 
       // Convert to FHIR resources
       const fhirResult = siuToFhirResources(siuMessage);
+
+      // Scope the schedule ID to the system so the same practitioner ID
+      // from different MSH-3+MSH-4 pairs won't collide.
+      const { practitionerId } = siuToScheduleReference(siuMessage);
+      const scopedScheduleId = `schedule-${systemId}-${practitionerId}`;
+      fhirResult.schedule.id = scopedScheduleId;
       
       // Process based on action type
       try {
-        // Ensure schedule exists (scoped to system)
-        const existingSchedules = await store.getSchedules({
-          actor: `Practitioner/${fhirResult.schedule.id?.replace('schedule-', '')}`,
-          system_id: systemId,
-        });
+        // Ensure schedule exists — look up by system-scoped ID
+        const existingSchedule = await store.getScheduleById(scopedScheduleId);
         
         let scheduleId: string;
-        if (existingSchedules.length === 0) {
+        if (!existingSchedule) {
           const scheduleWithSystem = {
             ...fhirResult.schedule,
             system_id: systemId,
@@ -252,7 +256,7 @@ export async function hl7Routes(fastify: FastifyInstance, store: FhirStore) {
           const createdSchedule = await store.createSchedule(scheduleWithSystem);
           scheduleId = createdSchedule.id!;
         } else {
-          scheduleId = existingSchedules[0].id!;
+          scheduleId = existingSchedule.id!;
         }
         
         // Deduplicate by placer appointment ID — update if we've seen this ID before

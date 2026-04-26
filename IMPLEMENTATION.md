@@ -15,7 +15,7 @@ FHIRTogether/
 ├── package.json                      # Dependencies and scripts
 ├── tsconfig.json                     # TypeScript configuration
 ├── setup.sh                          # Automated setup script
-├── data/                             # SQLite database directory (auto-created)
+├── data/                             # Database directory (auto-created)
 │   └── fhirtogether.db              # Database file
 └── src/
     ├── types/
@@ -34,7 +34,7 @@ FHIRTogether/
 
 ## 🎯 Features Implemented
 
-### 1. SQLite3 Database Backend
+### 1. Database Backend
 - ✅ Full implementation of `FhirStore` interface
 - ✅ Tables for Schedules, Slots, and Appointments
 - ✅ Proper foreign key relationships
@@ -226,7 +226,7 @@ curl "http://localhost:4010/Appointment?date=2025-12-09"
 ## 🎉 Success Criteria Met
 
 ✅ **Directory Framework**: Complete src/ structure with types, store, routes, examples  
-✅ **SQLite3 Backend**: Full CRUD operations for all FHIR resources  
+✅ **Database Backend**: Full CRUD operations for all FHIR resources  
 ✅ **API Endpoints**: All Schedule, Slot, Appointment operations implemented  
 ✅ **Busy Office Example**: 3 providers, 50-60 patients/day, 30 days ahead  
 ✅ **Data Generation**: Automated script with statistics reporting  

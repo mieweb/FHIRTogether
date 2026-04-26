@@ -149,12 +149,14 @@ export type SystemStatus = 'unverified' | 'pending' | 'active' | 'expired';
 
 /**
  * A registered system (EHR, clinic, hospital) in the synapse gateway.
- * Systems are identified by MSH-4 (sending facility) in HL7, or by URL in REST.
+ * Systems are identified by MSH-3 (sending application) + MSH-4 (sending facility)
+ * in HL7, or by URL in REST.
  */
 export interface SynapseSystem {
   id: string;
   name: string;
   url?: string;
+  mshApplication?: string;
   mshFacility?: string;
   status: SystemStatus;
   lastActivityAt: string;
@@ -263,17 +265,17 @@ export interface HL7MessageLogQuery {
 export interface FhirStore {
   // ==================== SYNAPSE SYSTEM OPERATIONS ====================
   createSystem(system: Omit<SynapseSystem, 'id' | 'createdAt' | 'lastActivityAt'> & { apiKeyHash?: string; mshSecretHash?: string; challengeToken?: string }): Promise<SynapseSystem>;
-  findOrCreateSystemByMSH(facility: string, secret: string): Promise<MSHLookupResult>;
+  findOrCreateSystemByMSH(application: string, facility: string, secret: string): Promise<MSHLookupResult>;
   getSystemById(id: string): Promise<SynapseSystem | undefined>;
   getSystemByUrl(url: string): Promise<SynapseSystem | undefined>;
-  getSystemByMshFacility(facility: string): Promise<SynapseSystem | undefined>;
+  getSystemByMsh(application: string, facility: string): Promise<SynapseSystem | undefined>;
   getSystemByApiKeyHash(hash: string): Promise<SynapseSystem | undefined>;
   getSystems(query?: SynapseSystemQuery): Promise<SynapseSystem[]>;
   updateSystem(id: string, updates: Partial<Pick<SynapseSystem, 'name' | 'url' | 'status' | 'ttlDays'>> & { apiKeyHash?: string; challengeToken?: string }): Promise<SynapseSystem>;
   updateSystemActivity(id: string): Promise<void>;
   deleteSystem(id: string): Promise<void>;
   getSystemChallengeToken(id: string): Promise<string | undefined>;
-  evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshFacility?: string }> }>;
+  evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshApplication?: string; mshFacility?: string }> }>;
 
   // ==================== SYNAPSE LOCATION OPERATIONS ====================
   createLocation(location: Omit<SynapseLocation, 'id' | 'createdAt'>): Promise<SynapseLocation>;

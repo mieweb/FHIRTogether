@@ -44,7 +44,7 @@ function toNaiveISO(date: Date): string {
  * The store will compare it against the version stored in the database
  * and report a mismatch so the server can warn or rebuild.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface SchemaStatus {
   current: number;
@@ -189,18 +189,20 @@ export class SqliteStore implements FhirStore {
         name TEXT NOT NULL,
         url TEXT,
         api_key_hash TEXT,
-        msh_facility TEXT UNIQUE,
+        msh_application TEXT,
+        msh_facility TEXT,
         msh_secret_hash TEXT,
         challenge_token TEXT,
         status TEXT NOT NULL DEFAULT 'unverified',
         last_activity_at TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        ttl_days INTEGER NOT NULL DEFAULT 7
+        ttl_days INTEGER NOT NULL DEFAULT 7,
+        UNIQUE(msh_application, msh_facility)
       );
 
       CREATE INDEX IF NOT EXISTS idx_systems_status ON systems(status);
       CREATE INDEX IF NOT EXISTS idx_systems_url ON systems(url);
-      CREATE INDEX IF NOT EXISTS idx_systems_msh_facility ON systems(msh_facility);
+      CREATE INDEX IF NOT EXISTS idx_systems_msh ON systems(msh_application, msh_facility);
       CREATE INDEX IF NOT EXISTS idx_systems_api_key_hash ON systems(api_key_hash);
 
       CREATE TABLE IF NOT EXISTS locations (
@@ -326,13 +328,14 @@ export class SqliteStore implements FhirStore {
     const now = toNaiveISO(new Date());
 
     this.db.prepare(`
-      INSERT INTO systems (id, name, url, api_key_hash, msh_facility, msh_secret_hash, challenge_token, status, last_activity_at, created_at, ttl_days)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO systems (id, name, url, api_key_hash, msh_application, msh_facility, msh_secret_hash, challenge_token, status, last_activity_at, created_at, ttl_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       system.name,
       system.url || null,
       system.apiKeyHash || null,
+      system.mshApplication || null,
       system.mshFacility || null,
       system.mshSecretHash || null,
       system.challengeToken || null,
@@ -342,11 +345,11 @@ export class SqliteStore implements FhirStore {
       system.ttlDays,
     );
 
-    return { id, name: system.name, url: system.url, mshFacility: system.mshFacility, status: system.status, lastActivityAt: now, createdAt: now, ttlDays: system.ttlDays };
+    return { id, name: system.name, url: system.url, mshApplication: system.mshApplication, mshFacility: system.mshFacility, status: system.status, lastActivityAt: now, createdAt: now, ttlDays: system.ttlDays };
   }
 
-  async findOrCreateSystemByMSH(facility: string, secret: string): Promise<MSHLookupResult> {
-    const existing = await this.getSystemByMshFacility(facility);
+  async findOrCreateSystemByMSH(application: string, facility: string, secret: string): Promise<MSHLookupResult> {
+    const existing = await this.getSystemByMsh(application, facility);
 
     if (existing) {
       // Verify secret matches
@@ -379,9 +382,10 @@ export class SqliteStore implements FhirStore {
     const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
     const defaultTtl = parseInt(process.env.SYSTEM_TTL_DAYS || '7', 10);
     const system = await this.createSystem({
-      name: facility,
+      name: `${application}@${facility}`,
       status: 'unverified' as SystemStatus,
       ttlDays: defaultTtl,
+      mshApplication: application,
       mshFacility: facility,
       mshSecretHash: secretHash,
       apiKeyHash,
@@ -411,8 +415,8 @@ export class SqliteStore implements FhirStore {
     return row ? this.rowToSystem(row) : undefined;
   }
 
-  async getSystemByMshFacility(facility: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE msh_facility = ?').get(facility) as any;
+  async getSystemByMsh(application: string, facility: string): Promise<SynapseSystem | undefined> {
+    const row = this.db.prepare('SELECT * FROM systems WHERE msh_application = ? AND msh_facility = ?').get(application, facility) as any;
     return row ? this.rowToSystem(row) : undefined;
   }
 
@@ -477,13 +481,13 @@ export class SqliteStore implements FhirStore {
     return row?.challenge_token || undefined;
   }
 
-  async evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshFacility?: string }> }> {
+  async evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshApplication?: string; mshFacility?: string }> }> {
     // Find expired systems: last_activity_at + ttl_days < now
     const rows = this.db.prepare(`
-      SELECT id, name, msh_facility FROM systems
+      SELECT id, name, msh_application, msh_facility FROM systems
       WHERE status != 'expired'
         AND datetime(last_activity_at, '+' || ttl_days || ' days') < datetime('now', 'localtime')
-    `).all() as Array<{ id: string; name: string; msh_facility: string | null }>;
+    `).all() as Array<{ id: string; name: string; msh_application: string | null; msh_facility: string | null }>;
 
     for (const row of rows) {
       // Cascade delete handles locations → schedules → slots → appointments
@@ -492,7 +496,7 @@ export class SqliteStore implements FhirStore {
 
     return {
       count: rows.length,
-      systems: rows.map(r => ({ id: r.id, name: r.name, mshFacility: r.msh_facility || undefined })),
+      systems: rows.map(r => ({ id: r.id, name: r.name, mshApplication: r.msh_application || undefined, mshFacility: r.msh_facility || undefined })),
     };
   }
 
@@ -626,26 +630,26 @@ export class SqliteStore implements FhirStore {
   }
 
   async getSchedules(query: FhirScheduleQuery & { system_id?: string }): Promise<Schedule[]> {
-    let sql = 'SELECT * FROM schedules WHERE 1=1';
+    let sql = 'SELECT s.*, sys.name AS system_name FROM schedules s LEFT JOIN systems sys ON s.system_id = sys.id WHERE 1=1';
     const params: any[] = [];
 
     if (query.active !== undefined) {
-      sql += ' AND active = ?';
+      sql += ' AND s.active = ?';
       params.push(query.active ? 1 : 0);
     }
 
     if (query.actor) {
-      sql += ' AND actor LIKE ?';
+      sql += ' AND s.actor LIKE ?';
       params.push(`%${query.actor}%`);
     }
 
     if (query.date) {
-      sql += ' AND (planning_horizon_start <= ? AND planning_horizon_end >= ?)';
+      sql += ' AND (s.planning_horizon_start <= ? AND s.planning_horizon_end >= ?)';
       params.push(query.date, query.date);
     }
 
     if (query.system_id) {
-      sql += ' AND system_id = ?';
+      sql += ' AND s.system_id = ?';
       params.push(query.system_id);
     }
 
@@ -1202,7 +1206,7 @@ export class SqliteStore implements FhirStore {
   }
 
   private rowToSchedule(row: any): Schedule {
-    return {
+    const schedule: Schedule = {
       resourceType: 'Schedule',
       id: row.id,
       active: row.active === 1,
@@ -1217,6 +1221,16 @@ export class SqliteStore implements FhirStore {
       comment: row.comment,
       meta: { lastUpdated: row.meta_last_updated },
     };
+
+    // Include system name as a FHIR extension when available
+    if (row.system_name) {
+      (schedule as any).extension = [{
+        url: 'https://fhirtogether.org/fhir/StructureDefinition/system-name',
+        valueString: row.system_name,
+      }];
+    }
+
+    return schedule;
   }
 
   private rowToSlot(row: any): Slot {
@@ -1294,6 +1308,7 @@ export class SqliteStore implements FhirStore {
       id: row.id,
       name: row.name,
       url: row.url || undefined,
+      mshApplication: row.msh_application || undefined,
       mshFacility: row.msh_facility || undefined,
       status: row.status as SystemStatus,
       lastActivityAt: row.last_activity_at,

@@ -51,15 +51,16 @@ describe('Synapse System CRUD', () => {
     expect(found!.name).toBe('URL Clinic');
   });
 
-  it('retrieves system by MSH facility', async () => {
+  it('retrieves system by MSH application + facility', async () => {
     await store.createSystem({
       name: 'HL7 Clinic',
       status: 'unverified',
       ttlDays: 7,
+      mshApplication: 'LEGACY_EHR',
       mshFacility: 'MAIN_HOSPITAL',
     });
 
-    const found = await store.getSystemByMshFacility('MAIN_HOSPITAL');
+    const found = await store.getSystemByMsh('LEGACY_EHR', 'MAIN_HOSPITAL');
     expect(found).toBeDefined();
     expect(found!.name).toBe('HL7 Clinic');
   });
@@ -83,7 +84,7 @@ describe('Synapse System CRUD', () => {
   it('returns undefined for non-existent system', async () => {
     expect(await store.getSystemById('nonexistent')).toBeUndefined();
     expect(await store.getSystemByUrl('https://nope.example.com')).toBeUndefined();
-    expect(await store.getSystemByMshFacility('NOPE')).toBeUndefined();
+    expect(await store.getSystemByMsh('NOPE', 'NOPE')).toBeUndefined();
     expect(await store.getSystemByApiKeyHash('badhash')).toBeUndefined();
   });
 
@@ -182,35 +183,43 @@ describe('findOrCreateSystemByMSH', () => {
   });
 
   it('creates a new unverified system on first contact', async () => {
-    const result = await store.findOrCreateSystemByMSH('NEW_HOSPITAL', 'secret123');
+    const result = await store.findOrCreateSystemByMSH('LEGACY_EHR', 'NEW_HOSPITAL', 'secret123');
 
     expect(result.isNew).toBe(true);
     expect(result.secretMatch).toBe(true);
-    expect(result.system.name).toBe('NEW_HOSPITAL');
+    expect(result.system.name).toBe('LEGACY_EHR@NEW_HOSPITAL');
     expect(result.system.status).toBe('unverified');
+    expect(result.system.mshApplication).toBe('LEGACY_EHR');
     expect(result.system.mshFacility).toBe('NEW_HOSPITAL');
   });
 
-  it('returns existing system when facility matches', async () => {
-    const first = await store.findOrCreateSystemByMSH('REPEAT_HOSPITAL', 'secret');
-    const second = await store.findOrCreateSystemByMSH('REPEAT_HOSPITAL', 'secret');
+  it('returns existing system when application+facility matches', async () => {
+    const first = await store.findOrCreateSystemByMSH('EHR', 'REPEAT_HOSPITAL', 'secret');
+    const second = await store.findOrCreateSystemByMSH('EHR', 'REPEAT_HOSPITAL', 'secret');
 
     expect(first.isNew).toBe(true);
     expect(second.isNew).toBe(false);
     expect(first.system.id).toBe(second.system.id);
   });
 
+  it('creates separate systems for different MSH-3 with same MSH-4', async () => {
+    const a = await store.findOrCreateSystemByMSH('EHR_A', 'SAME_HOSPITAL', 'secret');
+    const b = await store.findOrCreateSystemByMSH('EHR_B', 'SAME_HOSPITAL', 'secret');
+
+    expect(a.system.id).not.toBe(b.system.id);
+  });
+
   it('returns secretMatch=false for wrong secret', async () => {
-    await store.findOrCreateSystemByMSH('SECURE_HOSPITAL', 'correct-secret');
-    const result = await store.findOrCreateSystemByMSH('SECURE_HOSPITAL', 'wrong-secret');
+    await store.findOrCreateSystemByMSH('EHR', 'SECURE_HOSPITAL', 'correct-secret');
+    const result = await store.findOrCreateSystemByMSH('EHR', 'SECURE_HOSPITAL', 'wrong-secret');
 
     expect(result.isNew).toBe(false);
     expect(result.secretMatch).toBe(false);
   });
 
   it('returns secretMatch=true for correct secret', async () => {
-    await store.findOrCreateSystemByMSH('SECURE_HOSPITAL', 'mysecret');
-    const result = await store.findOrCreateSystemByMSH('SECURE_HOSPITAL', 'mysecret');
+    await store.findOrCreateSystemByMSH('EHR', 'SECURE_HOSPITAL', 'mysecret');
+    const result = await store.findOrCreateSystemByMSH('EHR', 'SECURE_HOSPITAL', 'mysecret');
 
     expect(result.isNew).toBe(false);
     expect(result.secretMatch).toBe(true);

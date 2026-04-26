@@ -22,7 +22,7 @@ import {
   wrapMLLP,
   unwrapMLLP,
 } from './parser';
-import { siuToFhirResources } from './converter';
+import { siuToFhirResources, siuToScheduleReference } from './converter';
 import { FhirStore } from '../types/fhir';
 
 /**
@@ -385,10 +385,11 @@ export class MLLPServer extends EventEmitter {
     const fhirResult = siuToFhirResources(siuMessage);
 
     try {
-      // ── Auto-register system from MSH-4/MSH-8 ──
+      // ── Auto-register system from MSH-3+MSH-4 / MSH-8 ──
+      const application = siuMessage.msh.sendingApplication;
       const facility = siuMessage.msh.sendingFacility;
       const secret = siuMessage.msh.security || '';
-      const mshResult = await this.store!.findOrCreateSystemByMSH(facility, secret);
+      const mshResult = await this.store!.findOrCreateSystemByMSH(application, facility, secret);
 
       if (!mshResult.secretMatch) {
         const ack = createACKResponse(
@@ -413,15 +414,16 @@ export class MLLPServer extends EventEmitter {
         locationId = location.id;
       }
 
-      // Ensure schedule exists (scoped to system)
-      const practitionerId = fhirResult.schedule.id?.replace('schedule-', '');
-      const existingSchedules = await this.store!.getSchedules({
-        actor: `Practitioner/${practitionerId}`,
-        system_id: systemId,
-      });
+      // Scope the schedule ID to the system (MSH-3+MSH-4)
+      const { practitionerId } = siuToScheduleReference(siuMessage);
+      const scopedScheduleId = `schedule-${systemId}-${practitionerId}`;
+      fhirResult.schedule.id = scopedScheduleId;
+
+      // Ensure schedule exists — look up by system-scoped ID
+      const existingSchedule = await this.store!.getScheduleById(scopedScheduleId);
 
       let scheduleId: string;
-      if (existingSchedules.length === 0) {
+      if (!existingSchedule) {
         const scheduleWithSystem = {
           ...fhirResult.schedule,
           system_id: systemId,
@@ -430,7 +432,7 @@ export class MLLPServer extends EventEmitter {
         const createdSchedule = await this.store!.createSchedule(scheduleWithSystem);
         scheduleId = createdSchedule.id!;
       } else {
-        scheduleId = existingSchedules[0].id!;
+        scheduleId = existingSchedule.id!;
       }
 
       // Handle appointment based on action
