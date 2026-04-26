@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppointmentList } from './components/AppointmentList';
 import { ImportData } from './components/ImportData';
+import { ScheduleSetup } from './components/ScheduleSetup';
 import './styles/scheduler.css';
 
 // Determine FHIR API base URL
@@ -14,7 +15,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const initialScheduleId = urlParams.get('schedule') || undefined;
 const initialDate = urlParams.get('date') || undefined;
 
-type TabType = 'appointments' | 'import';
+type TabType = 'appointments' | 'schedule-setup' | 'import';
 
 function ProviderView() {
   const [activeTab, setActiveTab] = useState<TabType>('appointments');
@@ -43,6 +44,16 @@ function ProviderView() {
         <button
           type="button"
           role="tab"
+          aria-selected={activeTab === 'schedule-setup'}
+          aria-controls="tab-schedule-setup"
+          className={`fs-demo-tab ${activeTab === 'schedule-setup' ? 'fs-demo-tab-active' : ''}`}
+          onClick={() => setActiveTab('schedule-setup')}
+        >
+          Schedule Setup
+        </button>
+        <button
+          type="button"
+          role="tab"
           aria-selected={activeTab === 'import'}
           aria-controls="tab-import"
           className={`fs-demo-tab ${activeTab === 'import' ? 'fs-demo-tab-active' : ''}`}
@@ -61,6 +72,23 @@ function ProviderView() {
       >
         {activeTab === 'appointments' && (
           <AppointmentList key={refreshKey} fhirBaseUrl={fhirBaseUrl} initialScheduleId={initialScheduleId} initialDate={initialDate} />
+        )}
+      </div>
+
+      <div
+        id="tab-schedule-setup"
+        role="tabpanel"
+        aria-labelledby="tab-schedule-setup"
+        hidden={activeTab !== 'schedule-setup'}
+      >
+        {activeTab === 'schedule-setup' && (
+          <ScheduleSetup
+            fhirBaseUrl={fhirBaseUrl}
+            initialScheduleId={initialScheduleId}
+            onGenerate={() => {
+              setRefreshKey((k) => k + 1);
+            }}
+          />
         )}
       </div>
 

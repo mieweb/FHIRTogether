@@ -221,3 +221,49 @@ export type VisitType = 'new-patient' | 'follow-up';
  * Scheduler workflow steps
  */
 export type SchedulerStep = 'visit-type' | 'questionnaire' | 'providers' | 'calendar' | 'booking' | 'confirmation';
+
+// ==================== Schedule Setup / Availability Template ====================
+
+/**
+ * Availability block — a daily time window that generates slots
+ */
+export interface AvailabilityBlock {
+  start: string;            // "08:00" (24h)
+  end: string;              // "12:00" (24h)
+  duration: number;         // minutes per slot
+  types?: string[];         // allowed appointment type codes
+  overbook?: number;        // max concurrent overbookings (0 = none)
+}
+
+/**
+ * Named appointment type definition
+ */
+export interface AppointmentTypeDefinition {
+  code: string;
+  description?: string;
+  duration?: number;
+}
+
+/**
+ * Availability template — defines recurring schedule availability.
+ * Submitted to POST /Schedule/:id/$generate-slots to create Slot resources.
+ */
+export interface AvailabilityTemplate {
+  startDate: string;        // "2026-05-01"
+  endDate: string;          // "2026-10-28"
+  weekdays: string[];       // ["mon", "tue", "wed", "thu", "fri"]
+  rrule?: string;           // RFC 5545 RRULE (overrides weekdays when present)
+  exdates?: string[];       // dates to exclude (holidays)
+  appointmentTypes?: AppointmentTypeDefinition[];
+  blocks: AvailabilityBlock[];
+}
+
+/**
+ * Result from the $generate-slots operation
+ */
+export interface GenerateSlotsResult {
+  slotsCreated: number;
+  slotsDeleted: number;
+  mode: string;
+  warnings?: string;
+}

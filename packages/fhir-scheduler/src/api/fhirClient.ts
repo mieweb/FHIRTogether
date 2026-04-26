@@ -6,6 +6,8 @@ import type {
   QuestionnaireResponse,
   SlotHold,
   Bundle,
+  AvailabilityTemplate,
+  GenerateSlotsResult,
 } from '../types';
 
 export interface FhirClientConfig {
@@ -37,6 +39,11 @@ export interface FhirClient {
     provider?: Schedule,
     visitType?: string
   ): Promise<Appointment>;
+  generateSlots(
+    scheduleId: string,
+    template: AvailabilityTemplate,
+    mode?: 'replace' | 'incremental'
+  ): Promise<GenerateSlotsResult>;
 }
 
 export function createFhirClient(config: FhirClientConfig): FhirClient {
@@ -254,6 +261,44 @@ export function createFhirClient(config: FhirClientConfig): FhirClient {
       }
       
       return res.json();
+    },
+
+    async generateSlots(
+      scheduleId: string,
+      template: AvailabilityTemplate,
+      mode: 'replace' | 'incremental' = 'replace'
+    ): Promise<GenerateSlotsResult> {
+      const res = await fetch(
+        `${baseUrl}/Schedule/${encodeURIComponent(scheduleId)}/$generate-slots?mode=${mode}`,
+        {
+          method: 'POST',
+          headers: defaultHeaders,
+          body: JSON.stringify({ template }),
+        }
+      );
+
+      const body = await res.json();
+
+      if (!res.ok) {
+        const details = body.details ? body.details.join('; ') : '';
+        throw new Error(body.error + (details ? `: ${details}` : ''));
+      }
+
+      // Parse OperationOutcome extensions
+      const resultExt = (body.extension || []).find(
+        (e: { url: string }) => e.url?.includes('generate-slots-result')
+      );
+      const extMap: Record<string, number | string> = {};
+      for (const e of resultExt?.extension || []) {
+        extMap[e.url] = e.valueInteger ?? e.valueString ?? '';
+      }
+
+      return {
+        slotsCreated: (extMap.slotsCreated as number) || 0,
+        slotsDeleted: (extMap.slotsDeleted as number) || 0,
+        mode: (extMap.mode as string) || mode,
+        warnings: (extMap.warnings as string) || undefined,
+      };
     },
   };
 }
