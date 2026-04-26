@@ -1,0 +1,73 @@
+# Inferno SMART Scheduling Links Test Kit
+#
+# Runs the actual Inferno test suite locally via Docker.
+# FHIRTogether must be running and accessible from Docker containers.
+#
+# Usage:
+#   docker compose -f docker-compose.inferno.yml up -d
+#   npm run validate-smart           # drives the Inferno API
+#   docker compose -f docker-compose.inferno.yml down
+
+services:
+  # One-shot migration — creates/updates the Inferno SQLite schema
+  # and copies the IG package to the shared volume for the validator
+  inferno_setup:
+    build:
+      context: https://github.com/inferno-framework/smart-scheduling-links-test-kit.git#main
+    volumes:
+      - inferno-data:/opt/inferno/data
+      - ig-data:/opt/inferno/data/igs
+    command: >
+      sh -c "bundle exec inferno migrate &&
+             cp lib/smart_scheduling_links_test_kit/igs/*.tgz /opt/inferno/data/igs/ 2>/dev/null || true"
+
+  inferno:
+    build:
+      context: https://github.com/inferno-framework/smart-scheduling-links-test-kit.git#main
+    volumes:
+      - inferno-data:/opt/inferno/data
+    depends_on:
+      inferno_setup:
+        condition: service_completed_successfully
+      hl7_validator_service:
+        condition: service_started
+
+  worker:
+    build:
+      context: https://github.com/inferno-framework/smart-scheduling-links-test-kit.git#main
+    volumes:
+      - inferno-data:/opt/inferno/data
+    command: bundle exec sidekiq -r ./worker.rb
+    depends_on:
+      inferno_setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  hl7_validator_service:
+    image: infernocommunity/inferno-resource-validator
+    environment:
+      SESSION_CACHE_DURATION: -1
+    volumes:
+      - ig-data:/app/igs
+
+  nginx:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./inferno/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - inferno
+      - hl7_validator_service
+
+  redis:
+    image: redis
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  inferno-data:
+  ig-data:
+  redis-data:
