@@ -107,8 +107,8 @@ describe('Booking Lifecycle', () => {
       }),
     });
     expect(res1.status).toBe(201);
-    const slot1 = await res1.json();
-    slot1Id = slot1.id;
+    const slot1 = await res1.json() as Record<string, unknown>;
+    slot1Id = slot1.id as string;
     expect(slot1Id).toBeTruthy();
 
     // Slot 2: 9:30-10:00
@@ -127,8 +127,8 @@ describe('Booking Lifecycle', () => {
       }),
     });
     expect(res2.status).toBe(201);
-    const slot2 = await res2.json();
-    slot2Id = slot2.id;
+    const slot2 = await res2.json() as Record<string, unknown>;
+    slot2Id = slot2.id as string;
     expect(slot2Id).toBeTruthy();
   });
 
@@ -142,7 +142,7 @@ describe('Booking Lifecycle', () => {
     });
 
     expect(res.status).toBe(200);
-    const hold = await res.json();
+    const hold = await res.json() as Record<string, unknown>;
     expect(hold.holdToken).toBeTruthy();
     expect(hold.status).toBe('held');
     expect(hold.expiresAt).toBeTruthy();
@@ -175,14 +175,14 @@ describe('Booking Lifecycle', () => {
     });
 
     expect(res.status).toBe(201);
-    const appt = await res.json();
+    const appt = await res.json() as Record<string, unknown>;
     expect(appt.id).toBeTruthy();
     expect(appt.status).toBe('booked');
 
     // Verify slot is now busy
     const slotRes = await fetch(`${baseUrl}/Slot/${slot1Id}`);
     expect(slotRes.status).toBe(200);
-    const slot = await slotRes.json();
+    const slot = await slotRes.json() as Record<string, unknown>;
     expect(slot.status).toBe('busy');
   });
 
@@ -204,7 +204,7 @@ describe('Booking Lifecycle', () => {
   it('other slot is still free and can be held', async () => {
     // Verify slot2 is still free
     const slotRes = await fetch(`${baseUrl}/Slot/${slot2Id}`);
-    const slot = await slotRes.json();
+    const slot = await slotRes.json() as Record<string, unknown>;
     expect(slot.status).toBe('free');
 
     // Can hold it
@@ -215,7 +215,7 @@ describe('Booking Lifecycle', () => {
     });
 
     expect(holdRes.status).toBe(200);
-    const hold = await holdRes.json();
+    const hold = await holdRes.json() as Record<string, unknown>;
     expect(hold.holdToken).toBeTruthy();
   });
 });
