@@ -103,6 +103,8 @@ describe('SMART Scheduling Links', () => {
       expect(location.resourceType).toBe('Location');
       expect(location.id).toBeDefined();
       expect(location.name).toBeDefined();
+      expect(location.telecom).toBeDefined();
+      expect(location.telecom.length).toBeGreaterThan(0);
     });
   });
 

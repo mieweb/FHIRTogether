@@ -139,8 +139,58 @@ The implementation covers the following aspects of the SMART Scheduling Links sp
 - **NDJSON output** — Location, Schedule, and Slot resources served as NDJSON with `application/fhir+ndjson` content type
 - **Cache-Control headers** — All responses include `Cache-Control: max-age=300`
 - **Slot fields** — Each slot includes `resourceType`, `id`, `schedule`, `status`, `start`, and `end`
+- **Slot status normalization** — Non-standard FHIR statuses (e.g. `busy-tentative`) are mapped to `free` or `busy` per spec
+- **Location telecom** — Every Location includes at least one `telecom` entry (URL fallback)
 - **Booking deep-link extension** — Configurable per deployment
-- **Jurisdiction extensions** — Configurable state filters on Slot output entries
+- **Jurisdiction extensions** — Configurable state filters applied to all output entries
+
+### Inferno Test Suite Results
+
+| Test | ID | Status | Notes |
+|------|-----|--------|-------|
+| Manifest URL form | 1.01 | Pass | URL ends in `$bulk-publish` |
+| Manifest download | 1.02 | Pass | Returns 200 with valid JSON |
+| Cache-Control header | opt | Pass | `max-age=300` |
+| Manifest structure | 1.04 | Pass | All required fields present, correct types |
+| State extensions | opt | Pass* | Requires `SMART_SCHEDULING_JURISDICTIONS` env var |
+| Location resources | res | Pass** | See vaccine-specific gaps below |
+| Schedule resources | res | Pass** | See vaccine-specific gaps below |
+| Slot resources | res | Pass | All required fields, `free`/`busy` status only |
+
+### Known Inferno Gaps (Vaccine-Specific Profiles)
+
+The Inferno test suite validates resources against **vaccine-specific** FHIR profiles (`vaccine-location`, `vaccine-schedule`, `vaccine-slot`). FHIRTogether is a **general-purpose** scheduling system, so some vaccine-specific checks will not pass:
+
+| Check | Profile Requirement | FHIRTogether Status |
+|-------|-------------------|---------------------|
+| VTrckS PIN identifier | `vaccine-location` requires at least one Location with a CDC VTrckS PIN | Not applicable — FHIRTogether is not vaccine-specific |
+| COVID-19 service type | `vaccine-schedule` requires immunization + COVID-19 service type codings | Not applicable — Schedules use general service types |
+| Location `identifier` | `vaccine-location` requires an `identifier` array | Locations do not include vaccine registry identifiers |
+
+These are **not bugs** — they reflect the difference between a general scheduling platform and a vaccine-specific publisher. The core specification structural checks (manifest, NDJSON format, required FHIR fields) all pass.
+
+## Automated Validation
+
+Run the built-in Inferno-style validation against a running server:
+
+```bash
+# Start the server
+npm start &
+
+# Run validation (defaults to http://localhost:4010/$bulk-publish)
+npm run validate-smart
+
+# Or specify a custom URL
+npx tsx src/examples/validateSmartScheduling.ts https://your-server.example.com/\$bulk-publish
+```
+
+The script checks:
+- Manifest URL form, download, and JSON structure
+- `transactionTime` format (FHIR instant)
+- `Cache-Control` header presence
+- All NDJSON files downloadable and parseable
+- Resource-level field validation (type-specific checks)
+- State extension presence (optional)
 
 ## Links
 

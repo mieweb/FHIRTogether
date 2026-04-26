@@ -35,9 +35,11 @@ export function getSmartSchedulingConfig(): SmartSchedulingConfig {
 }
 
 /** Convert a SynapseLocation to a FHIR Location resource for SMART Scheduling Links */
-function toFhirLocation(loc: SynapseLocation): Record<string, unknown> {
+function toFhirLocation(loc: SynapseLocation, baseUrl: string): Record<string, unknown> {
   const telecom: Array<{ system: string; value: string }> = [];
   if (loc.phone) telecom.push({ system: 'phone', value: loc.phone });
+  // Spec requires at least one telecom entry; add a URL fallback
+  telecom.push({ system: 'url', value: `${baseUrl}/$bulk-publish` });
 
   const address: Record<string, unknown> = {};
   if (loc.address) address.line = [loc.address];
@@ -49,7 +51,7 @@ function toFhirLocation(loc: SynapseLocation): Record<string, unknown> {
     resourceType: 'Location',
     id: loc.id,
     name: loc.name,
-    ...(telecom.length > 0 ? { telecom } : {}),
+    telecom,
     ...(Object.keys(address).length > 0 ? { address } : {}),
   };
 }
@@ -94,24 +96,27 @@ export async function smartSchedulingRoutes(
 
       const output: Array<{ type: string; url: string; extension?: Record<string, unknown> }> = [];
 
+      const stateExt = (cfg.jurisdictions && cfg.jurisdictions.length > 0)
+        ? { state: cfg.jurisdictions }
+        : undefined;
+
       output.push({
         type: 'Location',
         url: `${baseUrl}/$bulk-publish/locations.ndjson`,
+        ...(stateExt ? { extension: stateExt } : {}),
       });
 
       output.push({
         type: 'Schedule',
         url: `${baseUrl}/$bulk-publish/schedules.ndjson`,
+        ...(stateExt ? { extension: stateExt } : {}),
       });
 
-      const slotEntry: { type: string; url: string; extension?: Record<string, string[]> } = {
+      output.push({
         type: 'Slot',
         url: `${baseUrl}/$bulk-publish/slots.ndjson`,
-      };
-      if (cfg.jurisdictions && cfg.jurisdictions.length > 0) {
-        slotEntry.extension = { state: cfg.jurisdictions };
-      }
-      output.push(slotEntry);
+        ...(stateExt ? { extension: stateExt } : {}),
+      });
 
       const manifest = {
         transactionTime: new Date().toISOString(),
@@ -142,7 +147,7 @@ export async function smartSchedulingRoutes(
     },
     async (_request: FastifyRequest, reply: FastifyReply) => {
       const locations = await store.getLocations();
-      const fhirLocations = locations.map(toFhirLocation);
+      const fhirLocations = locations.map(l => toFhirLocation(l, cfg.baseUrl || `${_request.protocol}://${_request.hostname}`));
       reply.header('Content-Type', 'application/fhir+ndjson');
       reply.header('Cache-Control', 'max-age=300');
       return reply.send(toNdjson(fhirLocations));
@@ -203,11 +208,13 @@ export async function smartSchedulingRoutes(
       const slots = await store.getSlots({});
 
       const ndjsonLines = slots.map(slot => {
+        // SMART Scheduling Links spec only recognizes "free" and "busy"
+        const status = slot.status === 'free' ? 'free' : 'busy';
         const resource: Record<string, unknown> = {
           resourceType: 'Slot',
           id: slot.id,
           schedule: slot.schedule,
-          status: slot.status,
+          status,
           start: slot.start,
           end: slot.end,
         };

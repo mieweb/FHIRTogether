@@ -11,6 +11,7 @@
     "generate-data": "tsx src/examples/generateBusyOffice.ts",
     "import-seed": "tsx src/examples/importSeedData.ts",
     "hl7-test": "tsx src/examples/testHL7.ts",
+    "validate-smart": "tsx src/examples/validateSmartScheduling.ts",
     "test": "jest --forceExit && playwright test",
     "test:unit": "jest --forceExit",
     "test:e2e": "playwright test",
