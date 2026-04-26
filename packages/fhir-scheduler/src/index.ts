@@ -6,6 +6,7 @@ export { BookingForm, ConnectedBookingForm } from './components/BookingForm';
 export { Confirmation, ConnectedConfirmation } from './components/Confirmation';
 export { AppointmentList } from './components/AppointmentList';
 export { ImportData } from './components/ImportData';
+export { ScheduleSetup } from './components/ScheduleSetup';
 
 // Store exports
 export { useSchedulerStore } from './store/schedulerStore';
@@ -24,4 +25,8 @@ export type {
   SlotHold,
   SchedulerWidgetProps,
   SchedulerStep,
+  AvailabilityTemplate,
+  AvailabilityBlock,
+  AppointmentTypeDefinition,
+  GenerateSlotsResult,
 } from './types';

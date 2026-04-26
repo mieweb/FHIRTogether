@@ -1790,3 +1790,562 @@
   background-color: #f9fafb;
   border-color: #9ca3af;
 }
+
+/* ==================== Schedule Setup ==================== */
+
+.fs-schedule-setup {
+  max-width: 720px;
+}
+
+.fs-schedule-setup-header {
+  margin-bottom: 1.25rem;
+}
+
+.fs-schedule-setup-subtitle {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.fs-schedule-setup-section {
+  margin-bottom: 1.25rem;
+}
+
+.fs-schedule-setup-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #374151;
+  margin-bottom: 0.375rem;
+}
+
+.fs-schedule-setup-label-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.375rem;
+}
+
+.fs-schedule-setup-preset-btn {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+}
+
+.fs-schedule-setup-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.fs-schedule-setup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fs-schedule-setup-field label {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.fs-schedule-setup-input {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  color: #1f2937;
+  background: #fff;
+}
+
+.fs-schedule-setup-input:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+  border-color: #2563eb;
+}
+
+/* Weekday picker */
+
+.fs-weekday-picker {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.fs-weekday-btn {
+  width: 2.75rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.fs-weekday-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.fs-weekday-btn-active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}
+
+.fs-weekday-btn-active:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+/* Block list */
+
+.fs-block-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.fs-block-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.625rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+.fs-block-remove {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.fs-block-remove:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+
+.fs-block-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Per-block type checkboxes */
+
+.fs-block-types {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.25rem;
+}
+
+.fs-block-types-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.fs-block-type-check {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+/* Appointment type list */
+
+.fs-type-list {
+  padding-left: 1rem;
+  margin-top: 0.5rem;
+}
+
+.fs-type-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+}
+
+/* Collapsible toggle */
+
+.fs-schedule-setup-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: none;
+  border: none;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fs-schedule-setup-toggle:hover {
+  color: #2563eb;
+}
+
+.fs-schedule-setup-optional {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.fs-toggle-arrow {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  font-size: 0.875rem;
+}
+
+.fs-toggle-arrow-open {
+  transform: rotate(90deg);
+}
+
+/* Preview */
+
+.fs-preview {
+  padding: 0.75rem 1rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 0.5rem;
+}
+
+.fs-preview-summary {
+  font-size: 0.9375rem;
+  color: #1e40af;
+}
+
+.fs-preview-detail {
+  font-size: 0.8125rem;
+  color: #3b82f6;
+}
+
+.fs-preview-warning {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: #92400e;
+  background: #fef3c7;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.fs-preview-dates {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: #6b7280;
+}
+
+.fs-preview-dates-label {
+  font-weight: 500;
+}
+
+.fs-preview-date {
+  display: inline-block;
+  margin-right: 0.375rem;
+  font-family: monospace;
+  font-size: 0.75rem;
+  background: #dbeafe;
+  padding: 0.0625rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+/* Generate actions */
+
+.fs-generate-actions {
+  padding-top: 0.75rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.fs-generate-mode {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.fs-generate-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+}
+
+.fs-generate-btn {
+  min-width: 10rem;
+}
+
+/* Result messages */
+
+.fs-schedule-setup-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.fs-schedule-setup-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.fs-schedule-setup-warnings {
+  margin-top: 0.375rem;
+  color: #92400e;
+}
+
+/* Recurrence tabs (Outlook-style Daily / Weekly / Monthly / Yearly) */
+
+.fs-recurrence-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.fs-recurrence-tab {
+  flex: 1;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #374151;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+}
+
+.fs-recurrence-tab + .fs-recurrence-tab {
+  border-left: 1px solid #d1d5db;
+}
+
+.fs-recurrence-tab:hover {
+  background: #f3f4f6;
+}
+
+.fs-recurrence-tab-active {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.fs-recurrence-tab-active:hover {
+  background: #1d4ed8;
+}
+
+/* Recurrence panel (content below tabs) */
+
+.fs-recurrence-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+/* Radio row: "Every [input] day(s)" or "The [select] [select] of every [input] month(s)" */
+
+.fs-recurrence-radio-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.fs-recurrence-radio-row input[type="radio"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* Inline row (no radio): "Recur every [input] week(s) on:" */
+
+.fs-recurrence-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  color: #374151;
+  margin-bottom: 0.25rem;
+}
+
+/* Small number input inside recurrence rows */
+
+.fs-recurrence-num {
+  width: 3.25rem;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  text-align: center;
+}
+
+.fs-recurrence-num:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.fs-recurrence-num:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* Compact select inside recurrence rows */
+
+.fs-recurrence-select {
+  padding: 0.25rem 0.375rem;
+  font-size: 0.8125rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+  background: #fff;
+}
+
+.fs-recurrence-select:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.fs-recurrence-select:disabled {
+  background: #f3f4f6;
+  color: #9ca3af;
+}
+
+/* Generated RRULE display (small code badge) */
+
+.fs-rrule-display {
+  margin-bottom: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+  display: inline-block;
+}
+
+.fs-rrule-display code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.fs-schedule-setup-sublabel {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+/* Excluded dates */
+
+.fs-exdates-section {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f3f4f6;
+}
+
+.fs-exdate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+}
+
+.fs-exdate-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fs-exdate-row .fs-schedule-setup-input {
+  width: auto;
+}
+
+/* YAML config section */
+
+.fs-yaml-section {
+  margin-top: 0.5rem;
+}
+
+.fs-yaml-hint {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: 0 0 0.5rem 0;
+}
+
+.fs-yaml-textarea {
+  width: 100%;
+  min-height: 14rem;
+  padding: 0.75rem;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: #f9fafb;
+  color: #1f2937;
+  resize: vertical;
+  box-sizing: border-box;
+  tab-size: 2;
+}
+
+.fs-yaml-textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+  background: #fff;
+}
+
+.fs-yaml-error {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 0.375rem 0.5rem;
+  border-radius: 0.25rem;
+  border: 1px solid #fecaca;
+}
+
+.fs-yaml-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
