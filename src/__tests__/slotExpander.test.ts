@@ -302,3 +302,150 @@ describe('expandSlots', () => {
     expect(warnings.some(w => w.includes('consider a shorter date range'))).toBe(true);
   });
 });
+
+// ==================== RRULE support ====================
+
+describe('parseSlotYAML (RRULE fields)', () => {
+  it('parses rrule field', () => {
+    const yaml = `
+startDate: "2026-05-01"
+endDate: "2026-05-31"
+rrule: "FREQ=WEEKLY;BYDAY=MO,WE,FR"
+
+blocks:
+  - start: "09:00"
+    end: "12:00"
+    duration: 30
+`;
+    const result = parseSlotYAML(yaml);
+    expect(result.rrule).toBe('FREQ=WEEKLY;BYDAY=MO,WE,FR');
+  });
+
+  it('parses exdates array', () => {
+    const yaml = `
+startDate: "2026-05-01"
+endDate: "2026-05-31"
+weekdays: [mon, tue, wed, thu, fri]
+exdates: [2026-05-05, 2026-05-26]
+
+blocks:
+  - start: "09:00"
+    end: "12:00"
+    duration: 30
+`;
+    const result = parseSlotYAML(yaml);
+    expect(result.exdates).toEqual(['2026-05-05', '2026-05-26']);
+  });
+});
+
+describe('validateTemplate (RRULE)', () => {
+  const baseTemplate: AvailabilityTemplate = {
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    weekdays: [],
+    rrule: 'FREQ=WEEKLY;BYDAY=MO,WE,FR',
+    blocks: [{ start: '09:00', end: '12:00', duration: 30 }],
+  };
+
+  it('accepts valid rrule without weekdays', () => {
+    expect(validateTemplate(baseTemplate)).toEqual([]);
+  });
+
+  it('rejects invalid rrule syntax', () => {
+    const errors = validateTemplate({ ...baseTemplate, rrule: 'INVALID_RRULE' });
+    expect(errors).toContainEqual(expect.stringContaining('Invalid rrule'));
+  });
+
+  it('rejects invalid exdates format', () => {
+    const errors = validateTemplate({ ...baseTemplate, exdates: ['not-a-date'] });
+    expect(errors).toContainEqual(expect.stringContaining('exdates[0]'));
+  });
+
+  it('accepts valid exdates', () => {
+    const errors = validateTemplate({ ...baseTemplate, exdates: ['2026-07-04', '2026-12-25'] });
+    expect(errors).toEqual([]);
+  });
+});
+
+describe('expandSlots (RRULE)', () => {
+  it('generates slots using RRULE BYDAY', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-04', // Monday
+      endDate: '2026-05-10',   // Sunday
+      weekdays: [],
+      rrule: 'FREQ=WEEKLY;BYDAY=MO,WE,FR',
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // Mon, Wed, Fri = 3 days × 1 slot = 3
+    expect(slots).toHaveLength(3);
+  });
+
+  it('supports bi-weekly RRULE (INTERVAL=2)', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-04', // Monday week 1
+      endDate: '2026-05-31',   // 4 weeks
+      weekdays: [],
+      rrule: 'FREQ=WEEKLY;INTERVAL=2;BYDAY=MO',
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // Bi-weekly Mondays starting May 4: May 4, May 18 = 2
+    expect(slots).toHaveLength(2);
+  });
+
+  it('supports monthly RRULE (first Monday)', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-01',
+      endDate: '2026-08-31', // 4 months
+      weekdays: [],
+      rrule: 'FREQ=MONTHLY;BYDAY=1MO',
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // First Monday: May 4, Jun 1, Jul 6, Aug 3 = 4
+    expect(slots).toHaveLength(4);
+  });
+
+  it('excludes dates listed in exdates', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-04',
+      endDate: '2026-05-08',
+      weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
+      exdates: ['2026-05-06'], // skip Wednesday
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // Mon–Fri minus Wed = 4 days × 1 slot = 4
+    expect(slots).toHaveLength(4);
+    const dates = slots.map(s => s.start?.slice(0, 10));
+    expect(dates).not.toContain('2026-05-06');
+  });
+
+  it('exdates works with RRULE too', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-04',
+      endDate: '2026-05-10',
+      weekdays: [],
+      rrule: 'FREQ=WEEKLY;BYDAY=MO,WE,FR',
+      exdates: ['2026-05-08'], // skip Friday
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // Mon, Wed, (Fri excluded) = 2
+    expect(slots).toHaveLength(2);
+  });
+
+  it('RRULE overrides weekdays when both present', () => {
+    const template: AvailabilityTemplate = {
+      startDate: '2026-05-04',
+      endDate: '2026-05-10',
+      weekdays: ['mon', 'tue', 'wed', 'thu', 'fri'], // ignored when rrule present
+      rrule: 'FREQ=WEEKLY;BYDAY=TU,TH',
+      blocks: [{ start: '09:00', end: '10:00', duration: 60 }],
+    };
+    const { slots } = expandSlots(template, 'Schedule/test-1');
+    // RRULE says Tue, Thu only = 2
+    expect(slots).toHaveLength(2);
+  });
+});
