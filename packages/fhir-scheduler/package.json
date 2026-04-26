@@ -44,8 +44,8 @@
   "author": "MieWeb",
   "license": "MIT",
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "peerDependenciesMeta": {
     "react": {
@@ -56,16 +56,16 @@
     }
   },
   "dependencies": {
-    "@mieweb/forms-renderer": "^0.1.0",
+    "@mieweb/forms-renderer": "^2.1.5",
     "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
-    "@types/react": "^18.2.45",
-    "@types/react-dom": "^18.2.18",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "typescript": "^5.3.3",
     "vite": "^8.0.10",
     "vite-plugin-dts": "^4.5.0"

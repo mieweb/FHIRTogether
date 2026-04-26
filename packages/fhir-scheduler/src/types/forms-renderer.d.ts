@@ -65,7 +65,7 @@ declare module '@mieweb/forms-renderer' {
    * @param subjectId - Optional subject reference
    * @returns FHIR QuestionnaireResponse resource
    */
-  export function buildQuestionnaireResponse(
+  export function toFhirQuestionnaireResponse(
     fields: FormField[],
     questionnaireId: string,
     subjectId?: string
