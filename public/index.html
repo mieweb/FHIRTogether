@@ -164,6 +164,30 @@
       font-size: 0.82rem;
       font-weight: 600;
     }
+
+    .welcome-body-text {
+      font-size: 0.92rem;
+      color: var(--mieweb-muted-foreground);
+    }
+
+    .welcome-link {
+      color: var(--mieweb-primary-600);
+    }
+
+    .welcome-code-link {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .welcome-arch-img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 8px;
+    }
+
+    .welcome-endpoints + .welcome-body-text {
+      margin-top: 0.75rem;
+    }
   </style>
 </head>
 <body>
@@ -202,18 +226,18 @@
 
     <section class="welcome-section" aria-label="Why FHIRTogether">
       <h3>Why FHIRTogether?</h3>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+      <p class="welcome-body-text">
         Healthcare scheduling shouldn&rsquo;t be this hard. Providers, resources, and patients
         deserve frictionless coordination &mdash; yet most systems still rely on phone calls, fax
         machines, and proprietary interfaces that don&rsquo;t talk to each other.
       </p>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
-        At <a href="https://bluehive.com" style="color:var(--mieweb-primary-600);">BlueHive</a>, our mission is to
+      <p class="welcome-body-text">
+        At <a href="https://bluehive.com" class="welcome-link">BlueHive</a>, our mission is to
         remove friction from healthcare collaboration. FHIRTogether is our open-source answer to the
         scheduling interoperability gap: a gateway that speaks both legacy HL7v2 and modern FHIR R4
         so the right patient reaches the right provider at the right time.
       </p>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+      <p class="welcome-body-text">
         Privacy is baked into the architecture. FHIRTogether follows a <strong>trap-door model</strong>
         for patient data: PHI enters via booking but is <strong>never echoed back</strong> in API
         responses, provider views, or confirmation screens. Data is stored only long enough to relay
@@ -225,41 +249,41 @@
     <section class="welcome-section" aria-label="Architecture overview" style="text-align:center;">
       <img src="/public/images/architecture.png"
            alt="FHIRTogether architecture — EHR systems behind the firewall connect through the FHIRTogether Synapse Gateway to the scheduling broker and consumer apps outside the firewall"
-           style="max-width:100%; height:auto; border-radius:8px;" />
+           class="welcome-arch-img" />
     </section>
 
     <section class="welcome-section" aria-label="Bridging HL7v2 and FHIR">
       <h3>Bridging HL7v2 &amp; FHIR Scheduling</h3>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+      <p class="welcome-body-text">
         If you&rsquo;ve worked with HL7v2, you know <strong>SIU messages</strong> (S12 book, S13
         reschedule, S15 cancel) handle <em>appointments</em> &mdash; committed time blocks. But
         HL7v2 has <strong>no standard for publishing availability</strong>. Schedules and open slots
         are managed outside the wire protocol, buried in each EHR&rsquo;s proprietary configuration.
       </p>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+      <p class="welcome-body-text">
         FHIR R4 fills that gap with three resources that model the full scheduling lifecycle:
       </p>
       <div class="welcome-endpoints">
-        <code><a href="/docs#/tag/Schedule" style="color:inherit;text-decoration:none;">Schedule</a></code> <span>Defines <em>availability</em> for a resource (provider, room, device) &mdash; the piece HL7v2 never had</span>
-        <code><a href="/docs#/tag/Slot" style="color:inherit;text-decoration:none;">Slot</a></code>     <span>Individual bookable time windows within a Schedule &mdash; <code>free</code> or <code>busy</code></span>
-        <code><a href="/docs#/tag/Appointment" style="color:inherit;text-decoration:none;">Appointment</a></code> <span>A committed booking that consumes a Slot &mdash; the FHIR equivalent of an SIU^S12</span>
+        <code><a href="/docs#/tag/Schedule" class="welcome-code-link">Schedule</a></code> <span>Defines <em>availability</em> for a resource (provider, room, device) &mdash; the piece HL7v2 never had</span>
+        <code><a href="/docs#/tag/Slot" class="welcome-code-link">Slot</a></code>     <span>Individual bookable time windows within a Schedule &mdash; <code>free</code> or <code>busy</code></span>
+        <code><a href="/docs#/tag/Appointment" class="welcome-code-link">Appointment</a></code> <span>A committed booking that consumes a Slot &mdash; the FHIR equivalent of an SIU^S12</span>
       </div>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground); margin-top:0.75rem;">
+      <p class="welcome-body-text">
         FHIRTogether translates between these worlds: inbound HL7v2 SIU messages become FHIR
         Appointments, while Schedules and Slots are published via the
         <a href="https://github.com/smart-on-fhir/smart-scheduling-links/blob/master/specification.md"
-           style="color:var(--mieweb-primary-600);">SMART Scheduling Links</a>
+           class="welcome-link">SMART Scheduling Links</a>
         <code>$bulk-publish</code> endpoint for broad discovery.
       </p>
     </section>
 
     <section class="welcome-section" aria-label="About this project">
       <h3>About</h3>
-      <p style="font-size:0.92rem; color:var(--mieweb-muted-foreground);">
+      <p class="welcome-body-text">
         FHIRTogether is a FHIR-compliant scheduling gateway with a pluggable SQLite-backed store,
         embeddable scheduling widget, and built-in HL7v2 SIU message translation. Explore the
-        <a href="/docs" style="color:var(--mieweb-primary-600);">API Documentation</a> to see every
-        endpoint, or try the <a href="/demo" style="color:var(--mieweb-primary-600);">Scheduler Demo</a>
+        <a href="/docs" class="welcome-link">API Documentation</a> to see every
+        endpoint, or try the <a href="/demo" class="welcome-link">Scheduler Demo</a>
         to book an appointment end-to-end.
       </p>
     </section>
