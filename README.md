@@ -141,6 +141,14 @@ Query parameters: `zip`, `specialty`, `name`, `status`
 
 ---
 
+## 🩺 FHIR React Component
+
+<a href="packages/fhir-scheduler/"><img src="packages/fhir-scheduler/docs/screenshots/01-provider-list.png" alt="FHIR Scheduler component" width="400"></a>
+
+An embeddable [FHIR Scheduler React component](packages/fhir-scheduler/) for browsing provider availability and booking appointments. See the [package README](packages/fhir-scheduler/README.md) for usage and integration details.
+
+---
+
 ## 🛠 Use Case: Making Legacy Systems FHIR-Compliant
 
 If you're working with a proprietary scheduling system that stores appointment data in a non-standard format (e.g., mainframe, custom RDBMS, HL7v2-only systems), **FHIRTogether** allows you to:
