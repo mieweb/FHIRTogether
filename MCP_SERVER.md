@@ -198,4 +198,76 @@ src/mcp/
 | `@modelcontextprotocol/sdk` | MCP server + SSE transport |
 | `zod` | Tool parameter validation and schema generation |
 | `better-sqlite3` | SQLite database driver |
+
+## Testing with VS Code
+
+VS Code's Copilot Chat can connect to the MCP server and use the scheduling tools directly in agent mode.
+
+### Setup
+
+1. **Start the server** with seed data:
+
+   ```bash
+   npm run build
+   npm run generate-data   # creates providers, schedules, and slots
+   node dist/server.js
+   ```
+
+2. **The MCP config is already in the repo** at `.vscode/mcp.json`:
+
+   ```json
+   {
+     "servers": {
+       "fhirtogether": {
+         "type": "sse",
+         "url": "http://localhost:4010/mcp/sse"
+       }
+     }
+   }
+   ```
+
+3. **Open Copilot Chat** in agent mode (not ask/edit mode) and you'll see the FHIRTogether tools available.
+
+### Example Conversation
+
+Try asking Copilot Chat in agent mode:
+
+> "I'd like to book a checkup appointment"
+
+The agent will:
+1. Call `list_providers` to discover available doctors
+2. Call `list_available_slots` to find open times
+3. Ask you to pick a time and provide your name
+4. Call `book_appointment` to confirm the booking
+5. Return a booking reference like `brave-wind-3471`
+
+You can then say:
+
+> "Cancel that appointment"
+
+And the agent will call `cancel_appointment` with the booking reference.
+
+### Available Tools
+
+Once connected, these MCP tools appear in Copilot Chat:
+
+| Tool | What it does |
+|------|-------------|
+| `list_providers` | Discover doctors and their specialties |
+| `list_schedules` | Browse schedules with planning horizons |
+| `list_available_slots` | Find open time slots for a provider |
+| `hold_slot` / `release_slot_hold` | Temporarily reserve a slot |
+| `book_appointment` | Book a slot for a patient |
+| `lookup_appointment` | Find appointment by booking reference |
+| `get_appointment` | Get appointment details by ID |
+| `list_appointments` | Browse appointments with filters |
+| `cancel_appointment` | Cancel by ID or booking reference |
+| `reschedule_appointment` | Move to a different time slot |
+| `get_schedule` / `get_slot` | Get details for a single resource |
+
+### Troubleshooting
+
+- **Auth errors**: MCP endpoints (`/mcp/*`) are public — no API key needed. If you see auth errors, rebuild and restart the server.
+- **No tools visible**: Make sure the server is running on port 4010 and Copilot Chat is in **agent mode** (not ask or edit mode).
+- **Stale data**: Seed data shifts dates automatically, but if slots look wrong, run `npm run generate-data` again.
 | `fastify` | HTTP server framework |
