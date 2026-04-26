@@ -75,7 +75,7 @@ const stats: TestStats = {
   },
 };
 
-function printResult(transport: string, result: SendResult, _eventType: string) {
+function printResult(transport: string, result: SendResult) {
   const status = result.success ? '✅' : '❌';
   const ackCode = result.ackCode || 'N/A';
   
@@ -134,7 +134,7 @@ async function runTests() {
       } else {
         stats.httpsFailed++;
       }
-      printResult('HTTPS', httpsResult, eventType);
+      printResult('HTTPS', httpsResult);
     }
     
     // Send via socket
@@ -148,7 +148,7 @@ async function runTests() {
       } else {
         stats.socketFailed++;
       }
-      printResult('Socket', socketResult, eventType);
+      printResult('Socket', socketResult);
     }
   }
   

@@ -381,7 +381,7 @@ describe('System Evaporation', () => {
     // Backdate last_activity_at to ensure it's past TTL
     // SQLite: datetime(last_activity_at, '+0 days') = last_activity_at, which is < now
     // We need to backdate by at least 1 second
-    const store2 = store as any;
+    const store2 = store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): void } } };
     store2.db.prepare("UPDATE systems SET last_activity_at = datetime('now', 'localtime', '-1 day') WHERE id = ?").run(sys.id);
 
     const result = await store.evaporateExpiredSystems();
@@ -400,7 +400,7 @@ describe('System Evaporation', () => {
     });
 
     // Backdate
-    const store2 = store as any;
+    const store2 = store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): void } } };
     store2.db.prepare("UPDATE systems SET last_activity_at = datetime('now', 'localtime', '-1 day') WHERE id = ?").run(sys.id);
 
     const result = await store.evaporateExpiredSystems();
