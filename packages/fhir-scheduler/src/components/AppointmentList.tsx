@@ -126,6 +126,17 @@ function getProviderName(schedule: Schedule): string {
 }
 
 /**
+ * Extract system name from Schedule extension
+ */
+function getSystemName(schedule: Schedule): string {
+  const ext = schedule.extension?.find(
+    (e: { url: string; valueString?: string }) =>
+      e.url === 'https://fhirtogether.org/fhir/StructureDefinition/system-name'
+  );
+  return ext?.valueString || 'Local';
+}
+
+/**
  * Status badge color mapping
  */
 function getStatusColor(status: string): string {
@@ -412,11 +423,31 @@ export function AppointmentList({ fhirBaseUrl, initialScheduleId, initialDate, c
           }}
           aria-label="Select a provider to view appointments"
         >
-          {providers.map((p) => (
-            <option key={p.id} value={p.id}>
-              {getProviderName(p)}
-            </option>
-          ))}
+          {(() => {
+            const groups = new Map<string, Schedule[]>();
+            for (const p of providers) {
+              const sys = getSystemName(p);
+              const list = groups.get(sys) || [];
+              list.push(p);
+              groups.set(sys, list);
+            }
+            if (groups.size <= 1) {
+              return providers.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {getProviderName(p)}
+                </option>
+              ));
+            }
+            return Array.from(groups.entries()).map(([systemName, groupProviders]) => (
+              <optgroup key={systemName} label={systemName}>
+                {groupProviders.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {getProviderName(p)}
+                  </option>
+                ))}
+              </optgroup>
+            ));
+          })()}
         </select>
       </section>
 
