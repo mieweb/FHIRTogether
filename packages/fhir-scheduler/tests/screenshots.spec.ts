@@ -147,6 +147,11 @@ function generateReadmeSection(): string {
 }
 
 test.describe('Documentation Screenshots', () => {
+  test.afterEach(async ({ request }) => {
+    // Clear all slot holds to prevent cross-test contamination
+    await request.delete('http://localhost:4010/Slot/$holds').catch(() => {});
+  });
+
   /**
    * Helper to select follow-up visit type (skips questionnaire)
    */

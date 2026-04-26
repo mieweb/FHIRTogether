@@ -57,9 +57,13 @@ function isPublicRead(method: string, url: string): boolean {
 /** Slot $hold and Appointment booking — public writes secured by hold tokens, not API keys. */
 const PATIENT_WRITE_RE = /^\/Slot\/[^/]+\/\$hold(\/[^/]+)?$/;
 
+/** Test cleanup endpoint — gated by ENABLE_TEST_ENDPOINTS, not by auth. */
+const TEST_CLEANUP_RE = /^\/Slot\/\$holds$/;
+
 function isPublicWrite(method: string, url: string): boolean {
   const path = url.split('?')[0];
   if (PATIENT_WRITE_RE.test(path)) return true;
+  if (method === 'DELETE' && TEST_CLEANUP_RE.test(path)) return true;
   if (method === 'POST' && path === '/Appointment') return true;
   return false;
 }

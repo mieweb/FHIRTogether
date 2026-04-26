@@ -15,6 +15,11 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.goto('http://localhost:5174/');
   });
 
+  test.afterEach(async ({ request }) => {
+    // Clear all slot holds to prevent cross-test contamination
+    await request.delete('http://localhost:4010/Slot/$holds').catch(() => {});
+  });
+
   test('displays visit type selector on load', async ({ page }) => {
     // Should show the header
     await expect(page.getByRole('heading', { name: '🗓️ FHIR Scheduler Widget' })).toBeVisible();

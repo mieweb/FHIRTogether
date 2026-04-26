@@ -38,7 +38,7 @@ export default defineConfig({
   webServer: [
     // In CI the backend is pre-started by the workflow
     ...(!process.env.CI ? [{
-      command: 'npm run dev',
+      command: 'ENABLE_TEST_ENDPOINTS=true npm run dev',
       cwd: '../..',  // FHIRTogether root
       url: 'http://localhost:4010/health',
       reuseExistingServer: true,

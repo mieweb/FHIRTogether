@@ -254,6 +254,33 @@ export async function slotRoutes(fastify: FastifyInstance, store: FhirStore) {
 
   // ==================== SLOT HOLD OPERATIONS ====================
 
+  // DELETE /Slot/$holds - Clear all holds (test mode only)
+  fastify.delete(
+    '/Slot/$holds',
+    {
+      schema: {
+        description: 'Clear all slot holds (test mode only)',
+        tags: ['Slot'],
+        response: {
+          200: {
+            type: 'object', additionalProperties: true,
+            properties: {
+              cleared: { type: 'number' },
+            },
+          },
+        },
+      },
+    },
+    async (_request: FastifyRequest, reply: FastifyReply) => {
+      if (process.env.ENABLE_TEST_ENDPOINTS !== 'true') {
+        return reply.code(403).send({ error: 'Test endpoints disabled' });
+      }
+
+      const cleared = await store.clearAllHolds();
+      return reply.send({ cleared });
+    }
+  );
+
   // POST /Slot/:id/$hold - Acquire hold on a slot
   fastify.post<{ Params: SlotHoldParams; Body: HoldRequestBody }>(
     '/Slot/:id/$hold',

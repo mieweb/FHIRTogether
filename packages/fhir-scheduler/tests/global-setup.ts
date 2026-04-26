@@ -6,24 +6,38 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Check if the database has actual data (not just empty tables).
+ * A freshly-created DB with only schema is ~4KB.
+ */
+function dbHasData(dbPath: string): boolean {
+  try {
+    const stats = statSync(dbPath);
+    // A DB with seed data (10K+ slots) is well over 1MB
+    return stats.size > 100_000;
+  } catch {
+    return false;
+  }
+}
+
 export default async function globalSetup() {
   const projectRoot = path.resolve(__dirname, '../../..');
   const dbPath = path.join(projectRoot, 'data', 'fhirtogether.db');
   const seedSchedulesPath = path.join(projectRoot, 'data', 'seed-schedules.jsonl');
   
-  // Check if database exists and seed data is available
-  const dbExists = existsSync(dbPath);
+  // Check if database exists with actual data
+  const dbExists = existsSync(dbPath) && dbHasData(dbPath);
   const seedDataExists = existsSync(seedSchedulesPath);
   
   if (!dbExists && seedDataExists) {
-    console.log('🔧 Database not found, importing seed data...');
+    console.log('🔧 Database missing or empty, importing seed data...');
     
     try {
       // Import seed data from JSONL files
