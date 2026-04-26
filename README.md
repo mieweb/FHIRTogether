@@ -1,6 +1,6 @@
 # FHIRTogether Scheduling Synapse
 
-**FHIR-compliant gateway and test server for schedule and appointment availability.**
+**Open source FHIR-compliant gateway and test server for schedule and appointment availability.**
 
 ---
 
@@ -12,14 +12,45 @@
 - Serving as a **test server** to prototype or simulate provider group schedules
 - Enabling **public applications** to discover and book available time
 
+<img src="public/images/architecture.png" alt="FHIRTogether architecture — EHR systems behind the firewall connect through the FHIRTogether Synapse Gateway to the scheduling broker and consumer apps outside the firewall" width="800">
+
+<details>
+<summary>Text version of the architecture diagram</summary>
+
+```mermaid
+flowchart LR
+  subgraph internal["🏥 Inside the Firewall"]
+    A[Legacy EHR]
+    E[New System — HL7]
+    F[New System — REST]
+  end
+
+  B[🔗 FHIRTogether Synapse Gateway]
+
+  subgraph external["🌐 Outside the Firewall"]
+    C[Scheduling Broker - BlueHive]
+    D[Users and Provider Apps]
+  end
+
+  E -->|SIU with MSH-4/MSH-8 — auto-registers| B
+  F -->|POST /System/register — TLS verify| B
+  A -->|HL7v2 SIU S13 S15| B
+  B -->|FHIR Schedule Slot Appointment| C
+  C -->|Book and Update via FHIR| B
+  B -->|HL7v2 ACK or Updates| A
+  D -->|Discover availability and request booking| C
+  D -->|GET /Directory — public| B
+  C -->|Notifications and confirmations| D
+
+  style internal fill:#fef3c7,stroke:#f59e0b
+  style external fill:#dbeafe,stroke:#3b82f6
+```
+</details>
+
+
 ## Sandbox Environment
 
 We are hosinting a public sandbox environment for testing and development at: https://fhirtogether.os.mieweb.org/ 
-
-We have an Enterprise Health EHR and WebChart EHR sandbox environment available for testing and development. If you want to test with real EHR data or simulate HL7v2 message ingestion, please reach out to us to get access.  If you would like to add your own EHR sandbox environment to the public testing environment, please reach out to us as well.
-
-https://masterdaily.dev.webchart.app/ - WebChart EHR Sandbox
-https://ehbhdemo.enterprise.health - Enterprise Health EHR Sandbox
 
 ## 🔒 PHI/PII Policy — Trap Door Model
 
@@ -68,41 +99,6 @@ flowchart LR
 - 🧪 Test mode for seeding schedules, clearing data, or simulating providers
 - 🤖 **MCP server** — expose scheduling tools to LLM agents via [Model Context Protocol](MCP_SERVER.md)
 - ⚡ Fastify-based, modern TypeScript stack
-
-<img src="public/images/architecture.png" alt="FHIRTogether architecture — EHR systems behind the firewall connect through the FHIRTogether Synapse Gateway to the scheduling broker and consumer apps outside the firewall" width="800">
-
-<details>
-<summary>Text version of the architecture diagram</summary>
-
-```mermaid
-flowchart LR
-  subgraph internal["🏥 Inside the Firewall"]
-    A[Legacy EHR]
-    E[New System — HL7]
-    F[New System — REST]
-  end
-
-  B[🔗 FHIRTogether Synapse Gateway]
-
-  subgraph external["🌐 Outside the Firewall"]
-    C[Scheduling Broker - BlueHive]
-    D[Users and Provider Apps]
-  end
-
-  E -->|SIU with MSH-4/MSH-8 — auto-registers| B
-  F -->|POST /System/register — TLS verify| B
-  A -->|HL7v2 SIU S13 S15| B
-  B -->|FHIR Schedule Slot Appointment| C
-  C -->|Book and Update via FHIR| B
-  B -->|HL7v2 ACK or Updates| A
-  D -->|Discover availability and request booking| C
-  D -->|GET /Directory — public| B
-  C -->|Notifications and confirmations| D
-
-  style internal fill:#fef3c7,stroke:#f59e0b
-  style external fill:#dbeafe,stroke:#3b82f6
-```
-</details>
 
 ---
 
@@ -156,6 +152,14 @@ Inactive systems automatically expire. Configurable via:
 Query parameters: `zip`, `specialty`, `name`, `status`
 
 ---
+
+## EHR Backend Sandboxes
+
+We have an Enterprise Health EHR and WebChart EHR sandbox environment available for testing and development. If you want to test with real EHR data or simulate HL7v2 message ingestion, please reach out to us to get access.  If you would like to add your own EHR sandbox environment to the public testing environment, please reach out to us as well.
+
+* https://masterdaily.dev.webchart.app/ - WebChart EHR Sandbox
+* https://ehbhdemo.enterprise.health - Enterprise Health EHR Sandbox
+
 
 ## 🩺 FHIR React Component
 
