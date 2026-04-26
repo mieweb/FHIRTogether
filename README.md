@@ -69,14 +69,25 @@ flowchart LR
 - 🤖 **MCP server** — expose scheduling tools to LLM agents via [Model Context Protocol](MCP_SERVER.md)
 - ⚡ Fastify-based, modern TypeScript stack
 
+<img src="public/images/architecture.png" alt="FHIRTogether architecture — EHR systems behind the firewall connect through the FHIRTogether Synapse Gateway to the scheduling broker and consumer apps outside the firewall" width="800">
+
+<details>
+<summary>Text version of the architecture diagram</summary>
+
 ```mermaid
 flowchart LR
-  A[Legacy EHR]
-  B[FHIRTogether Synapse Gateway]
-  C[Scheduling Broker - BlueHive]
-  D[Users and Provider Apps]
-  E[New System — HL7]
-  F[New System — REST]
+  subgraph internal["🏥 Inside the Firewall"]
+    A[Legacy EHR]
+    E[New System — HL7]
+    F[New System — REST]
+  end
+
+  B[🔗 FHIRTogether Synapse Gateway]
+
+  subgraph external["🌐 Outside the Firewall"]
+    C[Scheduling Broker - BlueHive]
+    D[Users and Provider Apps]
+  end
 
   E -->|SIU with MSH-4/MSH-8 — auto-registers| B
   F -->|POST /System/register — TLS verify| B
@@ -87,7 +98,11 @@ flowchart LR
   D -->|Discover availability and request booking| C
   D -->|GET /Directory — public| B
   C -->|Notifications and confirmations| D
+
+  style internal fill:#fef3c7,stroke:#f59e0b
+  style external fill:#dbeafe,stroke:#3b82f6
 ```
+</details>
 
 ---
 

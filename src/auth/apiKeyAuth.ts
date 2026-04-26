@@ -19,6 +19,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/health',
   '/docs',
   '/demo',
+  '/public/',
   '/scheduler/',
   '/Directory',
   '/System/register',
