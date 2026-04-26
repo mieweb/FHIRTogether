@@ -249,6 +249,34 @@ blocks:
     overbook: 0             # no overbooking
 ```
 
+#### RRULE example: bi-weekly clinic
+
+For schedules that don't follow a simple weekly pattern, use an
+[RFC 5545 RRULE](https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10)
+string instead of `weekdays`. The `rrule` field takes precedence over `weekdays`.
+
+```yaml
+startDate: "2026-05-01"
+endDate:   "2026-10-28"
+rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR"   # every other week
+exdates: [2026-07-04, 2026-09-07]                  # skip holidays
+
+blocks:
+  - start: "08:00"
+    end:   "12:00"
+    duration: 30
+```
+
+Common RRULE patterns:
+
+| Pattern | RRULE | Notes |
+|---|---|---|
+| Every weekday | `FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` | Same as `weekdays: [mon–fri]` |
+| Bi-weekly Mon/Wed/Fri | `FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR` | Alternating weeks |
+| First Monday of month | `FREQ=MONTHLY;BYDAY=1MO` | Monthly specialist clinic |
+| Last Friday of month | `FREQ=MONTHLY;BYDAY=-1FR` | End-of-month reviews |
+| Every 3rd day | `FREQ=DAILY;INTERVAL=3` | Rotating coverage |
+
 #### Field reference
 
 | YAML field | Purpose | FHIR Slot field | Example |
@@ -256,6 +284,8 @@ blocks:
 | `startDate` | First day of the availability window | — (controls generation range) | `"2026-05-01"` |
 | `endDate` | Last day of the availability window | — (controls generation range) | `"2026-10-28"` |
 | `weekdays` | Which days to generate slots | — (controls generation range) | `[mon, wed, fri]` |
+| `rrule` | RFC 5545 recurrence rule (overrides weekdays) | — (controls generation range) | `"FREQ=WEEKLY;INTERVAL=2;BYDAY=MO"` |
+| `exdates` | Dates to exclude (holidays, closures) | — (controls generation range) | `[2026-07-04, 2026-12-25]` |
 | `appointmentTypes[].code` | Short identifier for visit type | — (lookup key) | `OV` |
 | `appointmentTypes[].description` | Display name | `appointmentType.text` | `"Office Visit"` |
 | `appointmentTypes[].duration` | Default minutes for this type | — (can override block duration) | `30` |
@@ -386,13 +416,16 @@ with `rc_interval`, `rc_dow` bitmask, and `rc_enddate`. The Schedule YAML
 | WebChart recurrence | Schedule YAML equivalent |
 |---|---|
 | `RC_WEEKLY` + `rc_dow=42` (Mon+Wed+Fri) + `rc_interval=1` | `weekdays: [mon, wed, fri]` |
-| `RC_WEEKLY` + `rc_dow=62` (Mon–Fri) + `rc_interval=2` | Not yet supported (bi-weekly) — use two YAML files |
+| `RC_WEEKLY` + `rc_dow=62` (Mon–Fri) + `rc_interval=2` | `rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR"` |
 | `RC_DAILY` + `rc_interval=1` | `weekdays: [mon, tue, wed, thu, fri, sat, sun]` |
+| `RC_MONTHLY` + `rc_dow=2` (Mon) + nth-weekday | `rrule: "FREQ=MONTHLY;BYDAY=1MO"` |
 | `rc_enddate` | `endDate` |
 
-> **Note:** The YAML format currently supports weekly recurrence (the most
-> common pattern). Monthly, bi-weekly, and nth-weekday patterns require
-> generating the specific dates and creating slots individually.
+> **Note:** The `rrule` field supports any valid RFC 5545 recurrence rule,
+> including bi-weekly, monthly, and nth-weekday patterns. The `weekdays`
+> field remains available as a simpler alternative for basic weekly schedules.
+> Use `exdates` to exclude specific dates (holidays, vacations) from any
+> recurrence pattern.
 
 ---
 

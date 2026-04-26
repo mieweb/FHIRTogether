@@ -11,6 +11,7 @@
  * Schedule resources. See docs/scheduling-models.md for the full specification.
  */
 
+import { RRule } from 'rrule';
 import { Slot, CodeableConcept } from '../types/fhir';
 
 // ==================== TYPES ====================
@@ -33,6 +34,8 @@ export interface AvailabilityTemplate {
   startDate: string;        // "2026-05-01"
   endDate: string;          // "2026-10-28"
   weekdays: string[];       // ["mon", "tue", "wed", "thu", "fri"]
+  rrule?: string;           // RFC 5545 RRULE (overrides weekdays when present)
+  exdates?: string[];       // ["2026-07-04"] — dates to exclude (holidays)
   appointmentTypes?: AppointmentTypeDefinition[];
   blocks: AvailabilityBlock[];
 }
@@ -107,6 +110,13 @@ export function parseSlotYAML(text: string): AvailabilityTemplate {
     result.weekdays = (result.weekdays as string[]).map(d => d.toLowerCase());
   }
 
+  // Normalize exdates from string to array
+  if (typeof result.exdates === 'string') {
+    result.exdates = [result.exdates];
+  } else if (Array.isArray(result.exdates)) {
+    result.exdates = (result.exdates as string[]).map(d => d.trim());
+  }
+
   return result as unknown as AvailabilityTemplate;
 }
 
@@ -129,12 +139,28 @@ export function validateTemplate(template: AvailabilityTemplate): string[] {
     errors.push('startDate must be before or equal to endDate');
   }
 
-  if (!Array.isArray(template.weekdays) || template.weekdays.length === 0) {
-    errors.push('weekdays is required and must be a non-empty array');
+  // Validate RRULE if present; otherwise require weekdays
+  if (template.rrule) {
+    try {
+      RRule.fromString(template.rrule);
+    } catch (e) {
+      errors.push(`Invalid rrule: ${(e as Error).message}`);
+    }
+  } else if (!Array.isArray(template.weekdays) || template.weekdays.length === 0) {
+    errors.push('weekdays is required (or provide an rrule) and must be a non-empty array');
   } else {
     for (const day of template.weekdays) {
       if (!VALID_WEEKDAYS.has(day.toLowerCase())) {
         errors.push(`Invalid weekday: "${day}". Must be one of: ${[...VALID_WEEKDAYS].join(', ')}`);
+      }
+    }
+  }
+
+  // Validate exdates format
+  if (template.exdates) {
+    for (let i = 0; i < template.exdates.length; i++) {
+      if (!DATE_RE.test(template.exdates[i])) {
+        errors.push(`exdates[${i}] must be YYYY-MM-DD, got "${template.exdates[i]}"`);
       }
     }
   }
@@ -207,11 +233,12 @@ export function expandSlots(
   scheduleRef: string,
 ): ExpandResult {
   const warnings: string[] = [];
-  const weekdayNums = (template.weekdays || ['mon', 'tue', 'wed', 'thu', 'fri'])
-    .map(d => DAY_MAP[d.toLowerCase()]);
   const startDate = new Date(template.startDate + 'T00:00:00');
   const endDate = new Date(template.endDate + 'T00:00:00');
   const slots: Omit<Slot, 'id' | 'meta'>[] = [];
+
+  // Build set of excluded dates
+  const exdateSet = new Set((template.exdates || []).map(d => d.trim()));
 
   // Build lookup for appointment types by code
   const typeMap = new Map<string, AppointmentTypeDefinition>();
@@ -219,9 +246,14 @@ export function expandSlots(
     typeMap.set(t.code, t);
   }
 
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    if (!weekdayNums.includes(d.getDay())) continue;
-    const dateStr = d.toISOString().slice(0, 10);
+  // Resolve dates: RRULE-driven or weekday-driven
+  const dates = template.rrule
+    ? expandDatesFromRRule(template.rrule, startDate, endDate)
+    : expandDatesFromWeekdays(template.weekdays || ['mon', 'tue', 'wed', 'thu', 'fri'], startDate, endDate);
+
+  for (const d of dates) {
+    const dateStr = toDateString(d);
+    if (exdateSet.has(dateStr)) continue;
 
     for (const block of template.blocks) {
       const duration = parseInt(String(block.duration), 10) || 30;
@@ -281,6 +313,43 @@ export function expandSlots(
   }
 
   return { slots, warnings };
+}
+
+// ==================== DATE EXPANSION HELPERS ====================
+
+/**
+ * Expand dates from an RFC 5545 RRULE string, clamped to [start, end].
+ * The RRULE's own DTSTART/UNTIL are overridden by the template's startDate/endDate.
+ */
+function expandDatesFromRRule(rruleStr: string, start: Date, end: Date): Date[] {
+  // Parse the RRULE, then override DTSTART and UNTIL to match template bounds
+  const rule = RRule.fromString(rruleStr);
+  const bounded = new RRule({
+    ...rule.origOptions,
+    dtstart: start,
+    until: end,
+    count: undefined, // Remove count if UNTIL is set — template endDate wins
+  });
+  return bounded.all();
+}
+
+/**
+ * Expand dates from a weekday list (legacy mode), clamped to [start, end].
+ */
+function expandDatesFromWeekdays(weekdays: string[], start: Date, end: Date): Date[] {
+  const weekdayNums = weekdays.map(d => DAY_MAP[d.toLowerCase()]);
+  const dates: Date[] = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    if (weekdayNums.includes(d.getDay())) {
+      dates.push(new Date(d));
+    }
+  }
+  return dates;
+}
+
+/** Format a Date as YYYY-MM-DD without timezone shift. */
+function toDateString(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function pad2(n: number): string {
