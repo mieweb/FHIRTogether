@@ -17,7 +17,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:all": "jest --forceExit && playwright test && npm test --prefix packages/fhir-scheduler",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src/"
   },
   "keywords": [
     "fhir",
@@ -30,9 +30,9 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^8.5.0",
-    "@fastify/static": "^6.12.0",
+    "@fastify/static": "^7.0.0",
     "@fastify/swagger": "^8.14.0",
-    "@fastify/swagger-ui": "^2.1.0",
+    "@fastify/swagger-ui": "^4.2.0",
     "better-sqlite3": "^9.2.2",
     "dotenv": "^16.3.1",
     "fastify": "^4.25.2",
@@ -44,9 +44,9 @@
     "@types/better-sqlite3": "^7.6.8",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.6",
-    "@typescript-eslint/eslint-plugin": "^6.17.0",
-    "@typescript-eslint/parser": "^6.17.0",
-    "eslint": "^8.56.0",
+    "@eslint/js": "^9.27.0",
+    "eslint": "^9.27.0",
+    "typescript-eslint": "^8.32.1",
     "jest": "^30.3.0",
     "ts-jest": "^29.4.9",
     "ts-node": "^10.9.2",
