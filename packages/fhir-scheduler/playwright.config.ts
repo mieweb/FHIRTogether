@@ -45,10 +45,10 @@ export default defineConfig({
       timeout: 30000,
     }] : []),
     {
-      command: process.env.CI ? 'npx vite preview --port 5174' : 'npm run dev',
+      command: 'npx vite --port 5174',
       url: 'http://localhost:5174',
       reuseExistingServer: !process.env.CI,
-      timeout: process.env.CI ? 60000 : 30000,
+      timeout: 60000,
     },
   ],
 });
