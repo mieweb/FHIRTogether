@@ -23,6 +23,7 @@ const PUBLIC_PATH_PREFIXES = [
   '/Directory',
   '/System/register',
   '/hl7-tester',
+  '/mcp/',
 ];
 
 const PUBLIC_EXACT_PATHS = new Set(['/', '/health', '/favicon.ico']);

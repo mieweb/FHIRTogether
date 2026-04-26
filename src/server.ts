@@ -38,7 +38,7 @@ const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   : [];
 const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
 const EVAPORATION_CHECK_INTERVAL_HOURS = parseInt(process.env.EVAPORATION_CHECK_INTERVAL_HOURS || '1', 10);
-const ENABLE_MCP = process.env.ENABLE_MCP === 'true';
+const MCP_DISABLED = process.env.DISABLE_MCP === 'true';
 
 /** Recursively find the newest mtime in a directory tree. */
 function getNewestMtime(dir: string): number {
@@ -53,7 +53,6 @@ function getNewestMtime(dir: string): number {
   }
   return newest;
 }
->>>>>>> d19d19d (feat(mcp): Implement MCP server and appointment management tools)
 
 async function buildServer() {
   const fastify = Fastify({
@@ -224,7 +223,7 @@ async function buildServer() {
   });
 
   // Register MCP server if enabled
-  if (ENABLE_MCP) {
+  if (!MCP_DISABLED) {
     const mcpServer = createMcpServer(store);
     mcpServer.registerRoutes(fastify);
     fastify.log.info('MCP server enabled');
@@ -239,7 +238,6 @@ async function buildServer() {
     };
   });
 
-<<<<<<< HEAD
   // Root endpoint — serve customizable welcome page (HTML) or JSON metadata
   fastify.get('/', async (request, reply) => {
     const accept = (request.headers.accept || '').toLowerCase();
@@ -271,7 +269,7 @@ async function buildServer() {
           port: HL7_SOCKET_PORT,
           tls: HL7_TLS_ENABLED,
         } : null,
-        ...(ENABLE_MCP ? {
+        ...(!MCP_DISABLED ? {
           mcp: { enabled: true },
         } : {}),
       };
@@ -388,7 +386,7 @@ async function start() {
       console.log(`📨 HL7 Socket: ${HL7_TLS_ENABLED ? 'tls' : 'tcp'}://${HOST}:${HL7_SOCKET_PORT}`);
       console.log(`🔐 HL7 Socket IPs: ${HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS.join(', ') : '⚠️  ALL (set HL7_MLLP_ALLOWED_IPS)'}`);
     }
-    if (ENABLE_MCP) {
+    if (!MCP_DISABLED) {
       console.log(`🤖 MCP Server: http://${HOST}:${PORT}/mcp/sse`);
     }
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');

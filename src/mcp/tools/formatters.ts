@@ -1,6 +1,14 @@
 import { Schedule, Slot, Appointment, CodeableConcept, Reference } from '../../types/fhir';
 
 /**
+ * Extract the system name from a Schedule's extension (added by sqliteStore).
+ */
+export function getSystemName(schedule: Schedule): string | undefined {
+  const ext = (schedule as Schedule & { extension?: { url: string; valueString?: string }[] }).extension;
+  return ext?.find(e => e.url === 'https://fhirtogether.org/fhir/StructureDefinition/system-name')?.valueString;
+}
+
+/**
  * Helper to build the structured JSON response the IVR expects.
  * `speech` is caller-friendly (read aloud), `context` has full detail for the AI.
  */

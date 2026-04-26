@@ -46,10 +46,10 @@ flowchart TB
 
 ## Enabling the MCP Server
 
-Set the `ENABLE_MCP` environment variable:
+The MCP server is **enabled by default**. To disable it, set:
 
 ```bash
-STORE_BACKEND=sqlite ENABLE_MCP=true node dist/server.js
+DISABLE_MCP=true node dist/server.js
 ```
 
 This registers three routes on the Fastify instance:
