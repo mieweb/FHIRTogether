@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import type { Slot, PatientInfo, Schedule } from '../types';
 import { useSchedulerStore } from '../store/schedulerStore';
-import { QuestionnaireRenderer, buildQuestionnaireResponse } from '@mieweb/forms-renderer';
+import { QuestionnaireRenderer, toFhirQuestionnaireResponse } from '@mieweb/forms-renderer';
 import type { FormData as QuestionnaireFormData, FormField } from '@mieweb/forms-renderer';
 
 interface BookingFormProps {
@@ -150,7 +150,7 @@ function QuestionnaireSection({ questionnaireFormData, disabled, onCompletionCha
     try {
       const state = storeRef.current.getState();
       const fields: FormField[] = state.order.map((id: string) => state.byId[id]);
-      const response = buildQuestionnaireResponse(fields, 'intake-questionnaire');
+      const response = toFhirQuestionnaireResponse(fields, 'intake-questionnaire');
       
       // Convert to our QuestionnaireResponse type
       setQuestionnaireResponse(response as import('../types').QuestionnaireResponse);
