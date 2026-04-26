@@ -76,15 +76,28 @@ jobs:
         working-directory: packages/fhir-scheduler
 
       - name: Start backend server
-        run: node dist/server.js &
+        run: |
+          set -euo pipefail
+          node dist/server.js > backend.log 2>&1 &
+          echo $! > backend.pid
 
       - name: Wait for backend
-        run: npx wait-on http://localhost:4010/health --timeout 30000
+        run: npx wait-on http://127.0.0.1:4010/health --timeout 120000
 
       - run: npm test
         working-directory: packages/fhir-scheduler
-        env:
-          CI_SERVER_STARTED: 'true'
+
+      - name: Stop backend server
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then kill "$(cat backend.pid)" || true; fi
+
+      - name: Upload backend log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: backend.log
 
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
