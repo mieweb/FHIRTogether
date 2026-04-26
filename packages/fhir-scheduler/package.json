@@ -63,11 +63,11 @@
     "@playwright/test": "^1.57.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "^6.0.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "typescript": "^5.3.3",
     "vite": "^8.0.10",
-    "vite-plugin-dts": "^3.7.0"
+    "vite-plugin-dts": "^4.5.0"
   }
 }
