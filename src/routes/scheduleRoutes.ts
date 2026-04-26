@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { FhirStore, Schedule, FhirScheduleQuery, Bundle } from '../types/fhir';
+import { parseSlotYAML, validateTemplate, expandSlots, AvailabilityTemplate } from '../scheduling';
 
 interface ScheduleParams {
   id: string;
@@ -230,6 +231,118 @@ export async function scheduleRoutes(fastify: FastifyInstance, store: FhirStore)
       
       await store.deleteAllSchedules();
       return reply.code(204).send();
+    }
+  );
+
+  // POST /Schedule/:id/$generate-slots — Generate slots from availability template
+  fastify.post<{ Params: ScheduleParams; Body: { yaml?: string; template?: AvailabilityTemplate }; Querystring: { mode?: string } }>(
+    '/Schedule/:id/\\$generate-slots',
+    {
+      schema: {
+        description: 'Generate Slot resources from a YAML availability template or JSON template. ' +
+          'Mode "replace" (default) deletes existing free slots first; "incremental" keeps them.',
+        tags: ['Schedule'],
+        params: {
+          type: 'object', additionalProperties: true,
+          required: ['id'],
+          properties: {
+            id: { type: 'string' },
+          },
+        },
+        querystring: {
+          type: 'object', additionalProperties: true,
+          properties: {
+            mode: { type: 'string', enum: ['replace', 'incremental'], description: 'replace (default) or incremental' },
+          },
+        },
+        body: {
+          type: 'object', additionalProperties: true,
+          properties: {
+            yaml: { type: 'string', description: 'YAML availability template text' },
+            template: { type: 'object', additionalProperties: true, description: 'JSON availability template' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object', additionalProperties: true,
+            description: 'Result with slot count and warnings',
+          },
+          400: {
+            type: 'object', additionalProperties: true,
+            properties: { error: { type: 'string' }, details: { type: 'array' } },
+          },
+          404: {
+            type: 'object', additionalProperties: true,
+            properties: { error: { type: 'string' } },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      // Verify schedule exists
+      const schedule = await store.getScheduleById(request.params.id);
+      if (!schedule) {
+        return reply.code(404).send({ error: 'Schedule not found' });
+      }
+
+      // Parse template from YAML text or JSON body
+      let template: AvailabilityTemplate;
+      const body = request.body || {};
+
+      if (body.yaml) {
+        try {
+          template = parseSlotYAML(body.yaml);
+        } catch (err) {
+          return reply.code(400).send({ error: 'Invalid YAML', details: [(err as Error).message] });
+        }
+      } else if (body.template) {
+        template = body.template;
+      } else {
+        return reply.code(400).send({ error: 'Request must include "yaml" (string) or "template" (object)' });
+      }
+
+      // Validate
+      const errors = validateTemplate(template);
+      if (errors.length > 0) {
+        return reply.code(400).send({ error: 'Invalid availability template', details: errors });
+      }
+
+      // Expand into Slot resources
+      const scheduleRef = `Schedule/${request.params.id}`;
+      const { slots, warnings } = expandSlots(template, scheduleRef);
+
+      // Replace mode: delete existing free slots in this schedule first
+      const mode = request.query.mode || 'replace';
+      let deletedCount = 0;
+      if (mode === 'replace') {
+        deletedCount = await store.deleteSlotsBySchedule(request.params.id, 'free');
+      }
+
+      // Bulk insert
+      const { count } = await store.createSlots(slots);
+
+      // Store the template on the schedule for future reference
+      const templateJson = JSON.stringify(template);
+      await store.setAvailabilityTemplate(request.params.id, templateJson);
+
+      return reply.send({
+        resourceType: 'OperationOutcome',
+        issue: [{
+          severity: 'information',
+          code: 'informational',
+          diagnostics: `Generated ${count} slots for ${scheduleRef}` +
+            (deletedCount > 0 ? ` (replaced ${deletedCount} existing free slots)` : ''),
+        }],
+        extension: [{
+          url: 'https://fhirtogether.org/StructureDefinition/generate-slots-result',
+          extension: [
+            { url: 'slotsCreated', valueInteger: count },
+            { url: 'slotsDeleted', valueInteger: deletedCount },
+            { url: 'mode', valueString: mode },
+            ...(warnings.length > 0 ? [{ url: 'warnings', valueString: warnings.join('; ') }] : []),
+          ],
+        }],
+      });
     }
   );
 }

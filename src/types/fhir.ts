@@ -289,9 +289,11 @@ export interface FhirStore {
   getSlots(query: FhirSlotQuery): Promise<Slot[]>;
   getSlotById(id: string): Promise<Slot | null>;
   createSlot(slot: Slot): Promise<Slot>;
+  createSlots(slots: Omit<Slot, 'id' | 'meta'>[]): Promise<{ count: number }>;
   updateSlot(id: string, slot: Partial<Slot>): Promise<Slot>;
   deleteSlot(id: string): Promise<void>;
   deleteAllSlots(): Promise<void>;
+  deleteSlotsBySchedule(scheduleId: string, statusFilter?: string): Promise<number>;
 
   // Schedule operations
   getSchedules(query: FhirScheduleQuery): Promise<Schedule[]>;
@@ -300,6 +302,8 @@ export interface FhirStore {
   updateSchedule(id: string, schedule: Partial<Schedule>): Promise<Schedule>;
   deleteSchedule(id: string): Promise<void>;
   deleteAllSchedules(): Promise<void>;
+  setAvailabilityTemplate(scheduleId: string, template: string | null): Promise<void>;
+  getAvailabilityTemplate(scheduleId: string): Promise<string | null>;
 
   // Appointment operations
   getAppointments(query: FhirAppointmentQuery): Promise<Appointment[]>;
