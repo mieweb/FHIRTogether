@@ -154,13 +154,11 @@ export async function importSeedData(store: SqliteStore, dataDir: string = './da
   }
   console.log(`  ✓ Imported ${appointments.length} appointments`);
 
-  // Update the generation date to today so offset becomes 0 for future reads
-  if (offsetDays !== 0) {
-    const today = new Date();
-    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}T00:00:00`;
-    store.setGenerationDate(todayStr);
-    console.log(`  ✓ Updated generation date to ${todayStr}`);
-  }
+  // NOTE: We intentionally do NOT update seed-metadata.json here.
+  // The file records when the seed JSONL data was originally generated,
+  // so every import can calculate the correct date offset from that
+  // baseline.  Overwriting it would cause subsequent imports (e.g. after
+  // deleting the DB) to compute a 0-day offset and leave dates unshifted.
   
   console.log('✅ Seed data import complete');
 }

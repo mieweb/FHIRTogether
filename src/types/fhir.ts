@@ -315,6 +315,7 @@ export interface FhirStore {
   getActiveHold(slotId: string): Promise<SlotHold | null>;
   getHoldByToken(holdToken: string): Promise<SlotHold | null>;
   cleanupExpiredHolds(): Promise<number>;
+  clearAllHolds(): Promise<number>;
 
   // HL7 message log operations
   logHL7Message(entry: Omit<HL7MessageLogEntry, 'id'>): Promise<HL7MessageLogEntry>;

@@ -134,8 +134,8 @@ export async function appointmentRoutes(fastify: FastifyInstance, store: FhirSto
             resourceType: { type: 'string', const: 'Appointment' },
             status: { type: 'string', enum: ['proposed', 'pending', 'booked', 'arrived', 'fulfilled', 'cancelled', 'noshow'] },
             description: { type: 'string' },
-            start: { type: 'string', format: 'date-time' },
-            end: { type: 'string', format: 'date-time' },
+            start: { type: 'string' },
+            end: { type: 'string' },
             comment: { type: 'string' },
             participant: {
               type: 'array',

@@ -1140,6 +1140,11 @@ export class SqliteStore implements FhirStore {
     return result.changes;
   }
 
+  async clearAllHolds(): Promise<number> {
+    const result = this.db.prepare('DELETE FROM slot_holds').run();
+    return result.changes;
+  }
+
   // ==================== HL7 MESSAGE LOG OPERATIONS ====================
 
   async logHL7Message(entry: Omit<HL7MessageLogEntry, 'id'>): Promise<HL7MessageLogEntry> {
