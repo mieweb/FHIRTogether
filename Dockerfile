@@ -1,5 +1,5 @@
-# Use Node.js 18 as the base image
-FROM node:18
+# Use Node.js 22 as the base image (Vite requires 20.19+ or 22.12+)
+FROM node:22
 
 # Set the working directory
 WORKDIR /app
@@ -34,4 +34,5 @@ WORKDIR /app
 EXPOSE 4010
 
 # Set the default command to run the application
-CMD ["npm", "run", "dev"]
+ENV NODE_ENV=production
+CMD ["node", "packages/fhir-scheduler/dist/server.js"]
