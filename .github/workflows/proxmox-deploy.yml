@@ -14,6 +14,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_tag: ${{ steps.image.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
@@ -26,18 +28,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@v5
-        id: meta
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}
-          tags: |
-            type=raw,value=latest
-            type=sha
+      - id: image
+        run: echo "tag=${{ env.REGISTRY }}/${{ github.repository_owner }}/fhirtogether:latest" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
 
       - uses: docker/build-push-action@v6
         with:
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.image.outputs.tag }}
 
   deploy-production:
     needs: build-and-push
@@ -50,4 +47,4 @@ jobs:
         with:
           api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
           api_url: ${{ secrets.LAUNCHPAD_API_URL }}
-          template_name: ${{ env.REGISTRY }}/${{ github.repository }}:latest
+          template_name: ${{ needs.build-and-push.outputs.image_tag }}
