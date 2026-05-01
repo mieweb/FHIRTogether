@@ -34,4 +34,5 @@ WORKDIR /app
 EXPOSE 4010
 
 # Set the default command to run the application
-CMD ["npm", "run", "dev"]
+ENV NODE_ENV=production
+CMD ["node", "packages/fhir-scheduler/dist/server.js"]
