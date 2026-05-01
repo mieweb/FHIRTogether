@@ -1,34 +1,53 @@
-name: Proxmox Deployment
+name: Build and Deploy Production
 
 on:
   push:
     branches:
-      - main
+      - master
+
+env:
+  REGISTRY: ghcr.io
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      - name: Deploy FHIRTogether to Proxmox
-        uses: maxklema/proxmox-launchpad@main
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
         with:
-          # Required Proxmox credentials
-          proxmox_username: ${{ secrets.PROXMOX_USERNAME }}
-          proxmox_password: ${{ secrets.PROXMOX_PASSWORD }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-          # Container configuration
-          http_port: 4010
-          linux_distribution: debian
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha
 
-          # Optional: SSH access (recommended for security)
-          public_key: ${{ secrets.SSH_PUBLIC_KEY }}
+      - uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
 
-          # Use Docker for deployment
-          runtime_language: "docker"
+  deploy-production:
+    needs: build-and-push
+    runs-on: ubuntu-latest
 
-          # Environment variables passed to the Docker container
-          container_env_vars: '{"NODE_ENV": "production"}'
+    steps:
+      - uses: actions/checkout@v4
 
-          # Services required by FHIRTogether
-          # SQLite is file-based, so no external database service needed
-          services: '[]'
+      - uses: mieweb/launchpad@main
+        with:
+          api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
+          api_url: ${{ secrets.LAUNCHPAD_API_URL }}
+          template_name: ${{ env.REGISTRY }}/${{ github.repository }}:latest
