@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef } from 'react';
+import React from 'react';
+import { useState, useRef } from 'react';
 import { useSchedulerStore } from '../store/schedulerStore';
 import { QuestionnaireRenderer, toFhirQuestionnaireResponse } from '@mieweb/forms-renderer';
 import type { FormData as QuestionnaireFormData, FormField } from '@mieweb/forms-renderer';
@@ -8,22 +9,47 @@ interface IntakeQuestionnaireProps {
   onComplete?: () => void;
 }
 
+type EnableWhenCondition = { targetId: string; operator: string; value: string };
+type EnableWhen = { logic?: string; conditions: EnableWhenCondition[] };
+
+/**
+ * Evaluate a single enableWhen condition against a map of fields
+ */
+function evaluateCondition(condition: EnableWhenCondition, fieldsMap: Map<string, Record<string, unknown>>): boolean {
+  const targetField = fieldsMap.get(condition.targetId);
+  if (!targetField) return true;
+  const { operator, value } = condition;
+  const selected = targetField.selected;
+  switch (operator) {
+    case 'equals': return selected === value;
+    case 'notEquals': return selected !== value;
+    case 'includes': return Array.isArray(selected) ? selected.includes(value) : selected === value;
+    case 'notIncludes': return Array.isArray(selected) ? !selected.includes(value) : selected !== value;
+    default: return true;
+  }
+}
+
+/**
+ * Check if a field is visible based on its enableWhen conditions
+ */
+function isFieldVisible(field: Record<string, unknown>, fieldsMap: Map<string, Record<string, unknown>>): boolean {
+  const enableWhen = field.enableWhen as EnableWhen | undefined;
+  if (!enableWhen || !Array.isArray(enableWhen.conditions) || enableWhen.conditions.length === 0) return true;
+  const results = enableWhen.conditions.map((c) => evaluateCondition(c, fieldsMap));
+  return ((enableWhen.logic ?? 'AND').toUpperCase() === 'AND') ? results.every(Boolean) : results.some(Boolean);
+}
+
 /**
  * Check if a field has been answered
  */
 function isFieldAnswered(field: Record<string, unknown>): boolean {
   const fieldType = field.fieldType as string;
-  
+
   // Skip section headers - they don't need answers
   if (fieldType === 'section') {
     return true;
   }
-  
-  // Check if field is hidden by enableWhen logic
-  if (field.visible === false) {
-    return true;
-  }
-  
+
   switch (fieldType) {
     case 'text':
     case 'longtext':
@@ -42,10 +68,29 @@ function isFieldAnswered(field: Record<string, unknown>): boolean {
 }
 
 /**
- * Check if questionnaire is complete
+ * Flatten top-level + section children into a single list
+ */
+function flattenFields(fields: Record<string, unknown>[]): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = [];
+  for (const field of fields) {
+    result.push(field);
+    if (field.fieldType === 'section' && Array.isArray(field.fields)) {
+      result.push(...flattenFields(field.fields as Record<string, unknown>[]));
+    }
+  }
+  return result;
+}
+
+/**
+ * Check if questionnaire is complete — only visible non-section fields need to be answered
  */
 function isQuestionnaireComplete(fields: Record<string, unknown>[]): boolean {
-  return fields.every((field) => isFieldAnswered(field));
+  const allFields = flattenFields(fields);
+  const fieldsMap = new Map(allFields.map((f) => [f.id as string, f]));
+  return allFields
+    .filter((field) => field.fieldType !== 'section')
+    .filter((field) => isFieldVisible(field, fieldsMap))
+    .every((field) => isFieldAnswered(field));
 }
 
 /**
@@ -56,42 +101,68 @@ export function IntakeQuestionnaire({ questionnaireFormData, onComplete }: Intak
   const goBack = useSchedulerStore((state) => state.goBack);
   const proceedFromQuestionnaire = useSchedulerStore((state) => state.proceedFromQuestionnaire);
   const setQuestionnaireResponse = useSchedulerStore((state) => state.setQuestionnaireResponse);
-  
-  const [isComplete, setIsComplete] = useState(false);
+
   const [showValidationError, setShowValidationError] = useState(false);
-  const storeRef = useRef<{ getState: () => { order: string[]; byId: Record<string, FormField> } } | null>(null);
-  
-  const handleQuestionnaireChange = useCallback((_updatedFormData: unknown) => {
-    if (!storeRef.current) return;
-    
-    try {
-      const state = storeRef.current.getState();
-      const fields: FormField[] = state.order.map((id: string) => state.byId[id]);
-      const response = toFhirQuestionnaireResponse(fields, 'intake-questionnaire');
-      
-      setQuestionnaireResponse(response as import('../types').QuestionnaireResponse);
-      
-      // Check completion status
-      const complete = isQuestionnaireComplete(fields as Record<string, unknown>[]);
-      setIsComplete(complete);
-      if (complete) {
-        setShowValidationError(false);
-      }
-    } catch (err) {
-      console.warn('Failed to build questionnaire response:', err);
-    }
-  }, [setQuestionnaireResponse]);
-  
+  // QuestionnaireRenderer v2.1.5 exposes getResponse() via ref (returns flat array of answered FHIR items)
+  const rendererRef = useRef<{ getResponse: () => Array<{ id: string; answer?: Array<{ id?: string; value?: string }> }> } | null>(null);
+
   const handleContinue = () => {
-    if (!isComplete) {
+    const responseItems = rendererRef.current?.getResponse() ?? null;
+
+    if (!responseItems) {
+      // Renderer not ready yet
       setShowValidationError(true);
       return;
     }
-    
+
+    // Build a state map from the FHIR response items so enableWhen conditions can be evaluated
+    const allQFields = flattenFields(questionnaireFormData.fields as Record<string, unknown>[]);
+    const answeredIds = new Set(responseItems.map((item) => item.id));
+
+    const stateMap = new Map<string, Record<string, unknown>>();
+    for (const field of allQFields) {
+      const fieldId = field.id as string;
+      const responseItem = responseItems.find((item) => item.id === fieldId);
+      if (responseItem) {
+        const fieldType = field.fieldType as string;
+        if (['radio', 'dropdown', 'boolean'].includes(fieldType)) {
+          stateMap.set(fieldId, { ...field, selected: responseItem.answer?.[0]?.id ?? null });
+        } else if (['check', 'multiselect'].includes(fieldType)) {
+          stateMap.set(fieldId, { ...field, selected: (responseItem.answer ?? []).map((a) => a.id).filter(Boolean) });
+        } else {
+          stateMap.set(fieldId, { ...field, answer: responseItem.answer?.[0]?.value ?? '' });
+        }
+      } else {
+        stateMap.set(fieldId, field);
+      }
+    }
+
+    // Build FHIR QuestionnaireResponse for the store
+    try {
+      const response = toFhirQuestionnaireResponse(
+        responseItems as unknown as FormField[],
+        'intake-questionnaire'
+      );
+      setQuestionnaireResponse(response as import('../types').QuestionnaireResponse);
+    } catch {
+      // Non-critical — proceed even if FHIR response can't be built
+    }
+
+    // All visible non-section fields must have answers
+    const complete = allQFields
+      .filter((f) => f.fieldType !== 'section')
+      .filter((f) => isFieldVisible(f, stateMap))
+      .every((f) => answeredIds.has(f.id as string));
+
+    if (!complete) {
+      setShowValidationError(true);
+      return;
+    }
+
     proceedFromQuestionnaire();
     onComplete?.();
   };
-  
+
   return (
     <div className="fs-intake-questionnaire">
       <header className="fs-questionnaire-header">
@@ -108,22 +179,21 @@ export function IntakeQuestionnaire({ questionnaireFormData, onComplete }: Intak
         </button>
         <h2 className="fs-questionnaire-title">Patient Intake</h2>
       </header>
-      
+
       <p className="fs-questionnaire-intro">
-        Please complete the following questions to help us better serve you. 
+        Please complete the following questions to help us better serve you.
         This information will be reviewed by our staff to match you with the right provider.
       </p>
-      
+
       <div className="fs-questionnaire-form">
         <QuestionnaireRenderer
           formData={questionnaireFormData}
-          onChange={handleQuestionnaireChange}
+          ref={rendererRef as React.Ref<unknown>}
           hideUnsupportedFields={true}
           className="fs-questionnaire-renderer"
-          storeRef={storeRef}
         />
       </div>
-      
+
       {showValidationError && (
         <div className="fs-error-message" role="alert">
           <svg className="fs-error-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -135,7 +205,7 @@ export function IntakeQuestionnaire({ questionnaireFormData, onComplete }: Intak
           <span>Please complete all questions before continuing</span>
         </div>
       )}
-      
+
       <div className="fs-questionnaire-actions">
         <button
           type="button"
@@ -166,6 +236,6 @@ export function ConnectedIntakeQuestionnaire({
     proceedFromQuestionnaire();
     return null;
   }
-  
+
   return <IntakeQuestionnaire questionnaireFormData={questionnaireFormData} />;
 }
