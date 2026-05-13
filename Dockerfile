@@ -34,9 +34,9 @@ RUN npm run build:standalone
 # Go back to root
 WORKDIR /app
 
-# Expose the application port
+LABEL org.mieweb.opensource-server.services.http.default-port=4010
+
 EXPOSE 4010
 
-# Set the default command to run the application
 ENV NODE_ENV=production
 CMD ["node", "dist/server.js"]
