@@ -23,6 +23,10 @@ WORKDIR /app
 # Copy the rest of the application code
 COPY . .
 
+# Build the TypeScript server
+WORKDIR /app
+RUN npm run build:server
+
 # Build the fhir-scheduler standalone bundle
 WORKDIR /app/packages/fhir-scheduler
 RUN npm run build:standalone
@@ -35,4 +39,4 @@ EXPOSE 4010
 
 # Set the default command to run the application
 ENV NODE_ENV=production
-CMD ["node", "packages/fhir-scheduler/dist/server.js"]
+CMD ["node", "dist/server.js"]
