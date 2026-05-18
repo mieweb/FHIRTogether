@@ -84,7 +84,8 @@ jobs:
         with:
           api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
           api_url: ${{ secrets.LAUNCHPAD_API_URL }}
-          services: '[{"type":"http","internalPort":4010}]'
+          services: >-
+            [{"type":"http","internalPort":4010,"externalHostname":"${{ steps.preview.outputs.container_name }}","externalDomainId":${{ vars.LAUNCHPAD_EXTERNAL_DOMAIN_ID || 1 }}}]
           template_name: ${{ needs.build-and-push.outputs.image_tag }}
 
       - name: Comment preview URL on PR
