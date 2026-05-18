@@ -77,13 +77,14 @@ jobs:
           CONTAINER_NAME="${{ github.repository_owner }}-${REPO_NAME}-${{ github.head_ref }}"
           CONTAINER_NAME=${CONTAINER_NAME,,}
           CONTAINER_NAME=$(echo "$CONTAINER_NAME" | sed 's/[^a-z0-9-]/-/g')
+          echo "container_name=${CONTAINER_NAME}" >> "$GITHUB_OUTPUT"
           echo "url=https://${CONTAINER_NAME}.os.mieweb.org" >> "$GITHUB_OUTPUT"
 
       - uses: mieweb/launchpad@main
         with:
           api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
           api_url: ${{ secrets.LAUNCHPAD_API_URL }}
-          http_port: 4010
+          services: '[{"type":"http","internalPort":4010}]'
           template_name: ${{ needs.build-and-push.outputs.image_tag }}
 
       - name: Comment preview URL on PR
