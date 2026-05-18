@@ -71,6 +71,7 @@ jobs:
         with:
           api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
           api_url: ${{ secrets.LAUNCHPAD_API_URL }}
+          http_port: 4010
           template_name: ${{ needs.build-and-push.outputs.image_tag }}
 
   cleanup-preview:
