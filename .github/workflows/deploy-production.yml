@@ -48,3 +48,27 @@ jobs:
           api_key: ${{ secrets.LAUNCHPAD_API_KEY }}
           api_url: ${{ secrets.LAUNCHPAD_API_URL }}
           template_name: ${{ needs.build-and-push.outputs.image_tag }}
+
+      - name: Refresh container
+        env:
+          API_KEY: ${{ secrets.LAUNCHPAD_API_KEY }}
+          API_URL: ${{ secrets.LAUNCHPAD_API_URL }}
+        run: |
+          REPO_NAME=$(basename "${{ github.repository }}")
+          CONTAINER_NAME="${{ github.repository_owner }}-${REPO_NAME}-master"
+          CONTAINER_NAME=${CONTAINER_NAME,,}
+          CONTAINER_NAME=$(echo "$CONTAINER_NAME" | sed 's/[^a-z0-9-]/-/g')
+
+          RESPONSE=$(curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" \
+            "$API_URL/sites/1/containers?hostname=$CONTAINER_NAME")
+          CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.containers[0].id // empty')
+
+          if [[ -n "$CONTAINER_ID" ]]; then
+            echo "Refreshing container $CONTAINER_NAME (ID: $CONTAINER_ID)..."
+            REFRESH_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              -X POST -H "Authorization: Bearer $API_KEY" \
+              "$API_URL/sites/1/containers/$CONTAINER_ID/refresh")
+            echo "REFRESH response: $REFRESH_CODE"
+          else
+            echo "No container found to refresh."
+          fi
