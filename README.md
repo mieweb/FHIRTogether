@@ -346,6 +346,8 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 - [x] Public provider directory (/Directory) with FHIR, JSON, YAML, HL7v2 formats
 - [x] System evaporation (auto-expire inactive systems)
 - [x] Location management (CRUD + HL7 AIL auto-creation)
+- [x] SMART Scheduling Links `$bulk-publish` endpoint ([PR #34](https://github.com/mieweb/FHIRTogether/pull/34))
+- [x] Inferno test suite integration for FHIR validation (5/8 pass; 3 vaccine-specific failures are out of scope)
 - [ ] Implement an optional no-login scheduling portal for browsing schedules and booking like https://cal.com/ or Calend.ly.
 - [ ] Add login/authentication support for admins
 - [ ] Implement google/microsoft/apple login for the scheduling portal for end users
