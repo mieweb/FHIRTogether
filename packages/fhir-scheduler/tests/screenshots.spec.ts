@@ -173,9 +173,9 @@ test.describe('Documentation Screenshots', () => {
     await page.getByRole('button', { name: /Select Dr\./ }).first().click();
     await expect(page.getByRole('option').first()).toBeVisible({ timeout: 10000 });
     await page.getByRole('option').nth(dateIndex).click();
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
+    const slotLocator = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(slotLocator.first()).toBeVisible({ timeout: 10000 });
     // Use last() when slotIndex is -1 to avoid slot conflicts
-    const slotLocator = page.getByRole('option', { name: /AM|PM/ });
     if (slotIndex === -1) {
       await slotLocator.last().click();
     } else {
@@ -273,7 +273,8 @@ test.describe('Documentation Screenshots', () => {
   test('06-booking-filled: Completed form', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('http://localhost:5174/');
-    await navigateToBookingForm(page, 17, -1);
+    // Use index 5 for a stable date offset that avoids intermittent empty-slot selections in CI
+    await navigateToBookingForm(page, 5, -1);
     await page.locator('#fs-name').fill('Jane Smith');
     await page.locator('#fs-email').fill('jane.smith@example.com');
     await page.locator('#fs-phone').fill('(555) 123-4567');
@@ -304,11 +305,7 @@ test.describe('Documentation Screenshots', () => {
   test('09-mobile-booking: Mobile booking form', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('http://localhost:5174/');
-    await selectFollowUpVisit(page);
-    await page.getByRole('button', { name: /Select Dr\./ }).first().click();
-    await page.getByRole('option').nth(21).click();
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
-    await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
+    await navigateToBookingForm(page, 0, -1);
     await takeScreenshot(page, '09-mobile-booking', true);
   });
 });

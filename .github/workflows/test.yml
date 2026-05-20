@@ -78,7 +78,7 @@ jobs:
       - name: Start backend server
         run: |
           set -euo pipefail
-          node dist/server.js > backend.log 2>&1 &
+          ENABLE_TEST_ENDPOINTS=true node dist/server.js > backend.log 2>&1 &
           echo $! > backend.pid
 
       - name: Wait for backend
