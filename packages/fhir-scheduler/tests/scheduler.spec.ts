@@ -92,8 +92,8 @@ test.describe('FHIR Scheduler Widget', () => {
     await expect(page.getByRole('region', { name: 'Available times' })).toBeVisible();
     
     // Should have morning and/or afternoon sections
-    const timeSlots = page.getByRole('listbox', { name: /times/ });
-    await expect(timeSlots.first()).toBeVisible();
+    const timeSlots = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(timeSlots.first()).toBeVisible({ timeout: 10000 });
   });
 
   test('shows booking form with hold timer when slot is selected (follow-up)', async ({ page }) => {
@@ -108,8 +108,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(5).click();
     
     // Select last available time slot to avoid conflicts with other tests
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const availableTimes = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(availableTimes.first()).toBeVisible({ timeout: 10000 });
+    await availableTimes.last().click();
     
     // Should show booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -167,8 +168,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(7).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const availableTimes = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(availableTimes.first()).toBeVisible({ timeout: 10000 });
+    await availableTimes.last().click();
     
     // Should be on booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -192,8 +194,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(9).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const availableTimes = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(availableTimes.first()).toBeVisible({ timeout: 10000 });
+    await availableTimes.last().click();
     
     // Wait for booking form
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
@@ -242,8 +245,9 @@ test.describe('FHIR Scheduler Widget', () => {
     await page.getByRole('option').nth(11).click();
     
     // Select last time slot to avoid conflicts
-    await expect(page.getByRole('option', { name: /AM|PM/ }).first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option', { name: /AM|PM/ }).last().click();
+    const availableTimes = page.getByRole('region', { name: 'Available times' }).getByRole('option');
+    await expect(availableTimes.first()).toBeVisible({ timeout: 10000 });
+    await availableTimes.last().click();
     
     // Should show booking form without patient info fields
     await expect(page.getByRole('heading', { name: 'Complete Your Booking' })).toBeVisible({ timeout: 10000 });
