@@ -60,192 +60,67 @@ export interface SchemaStatus {
   migrated: boolean;
 }
 
+/** Path to the shared schema file (used by both SqliteStore and D1). */
+const SCHEMA_SQL_PATH = path.resolve(__dirname, '..', '..', 'migrations', '0001_initial.sql');
+
+export interface SqliteStoreOptions {
+  /**
+   * Optional provider returning the number of days to shift seed timestamps
+   * by. Only the example/seed-import scripts inject this; production
+   * deployments leave it unset (default: 0).
+   */
+  dateOffsetProvider?: () => number;
+}
+
 export class SqliteStore implements FhirStore {
   private db: Database.Database;
-  private dataDir: string;
-  private seedMetadataPath: string;
+  private readonly dateOffsetProvider: () => number;
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, options: SqliteStoreOptions = {}) {
     const finalPath = dbPath || process.env.SQLITE_DB_PATH || './data/fhirtogether.db';
-    
-    // Ensure directory exists
-    this.dataDir = path.dirname(finalPath);
-    if (!fs.existsSync(this.dataDir)) {
-      fs.mkdirSync(this.dataDir, { recursive: true });
-    }
-    
-    // Seed metadata file path (committable to git)
-    this.seedMetadataPath = path.join(this.dataDir, 'seed-metadata.json');
 
+    // Ensure directory exists
+    const dataDir = path.dirname(finalPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    this.dateOffsetProvider = options.dateOffsetProvider ?? (() => 0);
     this.db = new Database(finalPath);
     this.db.pragma('journal_mode = WAL');
   }
 
   async initialize(): Promise<SchemaStatus> {
-    // Meta table for tracking schema version
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS _meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-    `);
-
-    // Read the stored schema version (0 = brand new database)
+    // Read the stored schema version *before* applying DDL (0 = brand-new DB).
+    // We need a _meta table to exist first for the SELECT, but the schema file
+    // creates it itself with IF NOT EXISTS, so this is safe to run in order.
+    this.db.exec('CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
     const row = this.db.prepare('SELECT value FROM _meta WHERE key = ?').get('schema_version') as { value: string } | undefined;
     const dbVersion = row ? parseInt(row.value, 10) : 0;
 
-    // Create tables
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS schedules (
-        id TEXT PRIMARY KEY,
-        resource_type TEXT NOT NULL DEFAULT 'Schedule',
-        active INTEGER DEFAULT 1,
-        service_category TEXT,
-        service_type TEXT,
-        specialty TEXT,
-        actor TEXT NOT NULL,
-        planning_horizon_start TEXT,
-        planning_horizon_end TEXT,
-        comment TEXT,
-        meta_last_updated TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
+    // Apply the shared SQL schema (idempotent; uses CREATE TABLE / CREATE INDEX IF NOT EXISTS).
+    // This is the single source of truth — same file is applied to Cloudflare D1
+    // via `wrangler d1 migrations apply`.
+    const schemaSql = fs.readFileSync(SCHEMA_SQL_PATH, 'utf-8');
+    this.db.exec(schemaSql);
 
-      CREATE TABLE IF NOT EXISTS slots (
-        id TEXT PRIMARY KEY,
-        resource_type TEXT NOT NULL DEFAULT 'Slot',
-        schedule_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        start TEXT NOT NULL,
-        end TEXT NOT NULL,
-        service_category TEXT,
-        service_type TEXT,
-        specialty TEXT,
-        appointment_type TEXT,
-        overbooked INTEGER DEFAULT 0,
-        comment TEXT,
-        meta_last_updated TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
-      );
+    // ── In-place column migrations for pre-existing databases ──
+    // The schema file above creates all current columns on fresh installs.
+    // The blocks below upgrade databases created against older schemas.
+    // (D1 doesn't need these — Workers users start clean with versioned
+    // migrations; these only run when better-sqlite3 opens an existing file.)
 
-      CREATE TABLE IF NOT EXISTS appointments (
-        id TEXT PRIMARY KEY,
-        resource_type TEXT NOT NULL DEFAULT 'Appointment',
-        status TEXT NOT NULL,
-        identifier TEXT,
-        cancelation_reason TEXT,
-        service_category TEXT,
-        service_type TEXT,
-        specialty TEXT,
-        appointment_type TEXT,
-        reason_code TEXT,
-        priority INTEGER,
-        description TEXT,
-        slot_refs TEXT,
-        start TEXT,
-        end TEXT,
-        created TEXT,
-        comment TEXT,
-        patient_instruction TEXT,
-        participant TEXT NOT NULL,
-        meta_last_updated TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_slots_schedule ON slots(schedule_id);
-      CREATE INDEX IF NOT EXISTS idx_slots_start ON slots(start);
-      CREATE INDEX IF NOT EXISTS idx_slots_status ON slots(status);
-      CREATE INDEX IF NOT EXISTS idx_appointments_start ON appointments(start);
-      CREATE INDEX IF NOT EXISTS idx_appointments_status ON appointments(status);
-
-      CREATE TABLE IF NOT EXISTS slot_holds (
-        id TEXT PRIMARY KEY,
-        slot_id TEXT NOT NULL,
-        hold_token TEXT UNIQUE NOT NULL,
-        session_id TEXT NOT NULL,
-        expires_at TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (slot_id) REFERENCES slots(id) ON DELETE CASCADE
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_slot_holds_slot ON slot_holds(slot_id);
-      CREATE INDEX IF NOT EXISTS idx_slot_holds_expires ON slot_holds(expires_at);
-      CREATE INDEX IF NOT EXISTS idx_slot_holds_token ON slot_holds(hold_token);
-
-      CREATE TABLE IF NOT EXISTS hl7_message_log (
-        id TEXT PRIMARY KEY,
-        received_at TEXT NOT NULL,
-        source TEXT NOT NULL,
-        remote_address TEXT,
-        message_type TEXT,
-        trigger_event TEXT,
-        control_id TEXT,
-        raw_message TEXT NOT NULL,
-        ack_response TEXT,
-        ack_code TEXT,
-        processing_ms INTEGER
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_hl7_log_received ON hl7_message_log(received_at);
-      CREATE INDEX IF NOT EXISTS idx_hl7_log_source ON hl7_message_log(source);
-      CREATE INDEX IF NOT EXISTS idx_hl7_log_type ON hl7_message_log(message_type);
-
-      CREATE TABLE IF NOT EXISTS systems (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        url TEXT,
-        api_key_hash TEXT,
-        msh_application TEXT,
-        msh_facility TEXT,
-        msh_secret_hash TEXT,
-        challenge_token TEXT,
-        status TEXT NOT NULL DEFAULT 'unverified',
-        last_activity_at TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        ttl_days INTEGER NOT NULL DEFAULT 7,
-        UNIQUE(msh_application, msh_facility)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_systems_status ON systems(status);
-      CREATE INDEX IF NOT EXISTS idx_systems_url ON systems(url);
-      CREATE INDEX IF NOT EXISTS idx_systems_msh ON systems(msh_application, msh_facility);
-      CREATE INDEX IF NOT EXISTS idx_systems_api_key_hash ON systems(api_key_hash);
-
-      CREATE TABLE IF NOT EXISTS locations (
-        id TEXT PRIMARY KEY,
-        system_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        address TEXT,
-        city TEXT,
-        state TEXT,
-        zip TEXT,
-        phone TEXT,
-        hl7_location_id TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (system_id) REFERENCES systems(id) ON DELETE CASCADE
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_locations_system ON locations(system_id);
-      CREATE INDEX IF NOT EXISTS idx_locations_hl7 ON locations(system_id, hl7_location_id);
-    `);
-
-    // Migration: add identifier column if missing (existing databases)
+    // Migration: add identifier column if missing
     const cols = this.db.pragma('table_info(appointments)') as { name: string }[];
     if (!cols.some(c => c.name === 'identifier')) {
       this.db.exec('ALTER TABLE appointments ADD COLUMN identifier TEXT');
     }
-
-    // Ensure identifier index exists (covers both fresh and migrated databases)
-    this.db.exec('CREATE INDEX IF NOT EXISTS idx_appointments_identifier ON appointments(identifier)');
 
     // Migration v2→v3: add system_id and location_id to schedules
     const scheduleCols = this.db.pragma('table_info(schedules)') as { name: string }[];
     if (!scheduleCols.some(c => c.name === 'system_id')) {
       this.db.exec('ALTER TABLE schedules ADD COLUMN system_id TEXT REFERENCES systems(id) ON DELETE CASCADE');
       this.db.exec('ALTER TABLE schedules ADD COLUMN location_id TEXT REFERENCES locations(id) ON DELETE SET NULL');
-      this.db.exec('CREATE INDEX IF NOT EXISTS idx_schedules_system ON schedules(system_id)');
-      this.db.exec('CREATE INDEX IF NOT EXISTS idx_schedules_location ON schedules(location_id)');
 
       // If there are existing schedules, create a "legacy" system and assign them
       const existingCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM schedules').get() as { cnt: number }).cnt;
@@ -286,53 +161,13 @@ export class SqliteStore implements FhirStore {
   }
 
   // ==================== DATE OFFSET FOR CONSISTENT TEST DATA ====================
-
-  /**
-   * Get the generation date from seed metadata file
-   * This file is committed to git so all environments use the same date offset
-   */
-  getGenerationDate(): string | null {
-    try {
-      if (fs.existsSync(this.seedMetadataPath)) {
-        const data = JSON.parse(fs.readFileSync(this.seedMetadataPath, 'utf-8'));
-        return data.generationDate || null;
-      }
-    } catch {
-      // Ignore parse errors
-    }
-    return null;
-  }
-
-  /**
-   * Set the generation date in seed metadata file
-   * This file should be committed to git
-   */
-  setGenerationDate(date: string): void {
-    const metadata = {
-      generationDate: date,
-      description: 'Seed data generation metadata - commit this file to git',
-      note: 'Dates in slots/appointments are shifted by (today - generationDate) days',
-    };
-    fs.writeFileSync(this.seedMetadataPath, JSON.stringify(metadata, null, 2) + '\n');
-  }
-
-  /**
-   * Calculate the number of days to shift dates from generation to today
-   */
-  getDateOffsetDays(): number {
-    const generationDate = this.getGenerationDate();
-    if (!generationDate) return 0;
-    
-    const genDate = new Date(generationDate);
-    const today = new Date();
-    
-    // Reset time to start of day for accurate day calculation
-    genDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    
-    const diffMs = today.getTime() - genDate.getTime();
-    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  }
+  //
+  // Seed-data scripts inject a `dateOffsetProvider` via constructor options
+  // so seed timestamps stay "current" relative to today. Production
+  // deployments leave the provider unset (returns 0 → no shift). The
+  // seed-metadata file itself is handled by `src/examples/seedMetadata.ts`
+  // — it lives outside the storage layer because it's a Node-only
+  // deployment concern, not a database concern.
 
   // ==================== SYNAPSE SYSTEM OPERATIONS ====================
 
@@ -793,7 +628,7 @@ export class SqliteStore implements FhirStore {
    * shiftDate adds offsetDays on read; this subtracts them for queries.
    */
   private unshiftDate(isoDate: string): string {
-    const offsetDays = this.getDateOffsetDays();
+    const offsetDays = this.dateOffsetProvider();
     if (offsetDays === 0) return isoDate;
     const date = new Date(isoDate);
     date.setDate(date.getDate() - offsetDays);

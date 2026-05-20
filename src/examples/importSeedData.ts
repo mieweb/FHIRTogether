@@ -13,6 +13,7 @@
  */
 
 import { SqliteStore } from '../store/sqliteStore';
+import { getDateOffsetDays } from './seedMetadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -117,7 +118,7 @@ export async function importSeedData(store: SqliteStore, dataDir: string = './da
   console.log('📦 Importing seed data...');
 
   // Calculate the date offset so seed data dates are shifted to today
-  const offsetDays = store.getDateOffsetDays();
+  const offsetDays = getDateOffsetDays(dataDir);
   if (offsetDays !== 0) {
     console.log(`  ⏩ Shifting seed dates by ${offsetDays} day(s) to align with today`);
   }
