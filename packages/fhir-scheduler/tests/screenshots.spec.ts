@@ -175,8 +175,8 @@ test.describe('Documentation Screenshots', () => {
     await page.getByRole('option').nth(dateIndex).click();
     const slotLocator = page.getByRole('region', { name: 'Available times' }).getByRole('option');
     await expect(slotLocator.first()).toBeVisible({ timeout: 10000 });
-    // Use last() when slotIndex is -1 to avoid slot conflicts
     if (slotIndex === -1) {
+      // Use last() when slotIndex is -1 to avoid slot conflicts
       await slotLocator.last().click();
     } else {
       await slotLocator.nth(slotIndex).click();
@@ -273,6 +273,7 @@ test.describe('Documentation Screenshots', () => {
   test('06-booking-filled: Completed form', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('http://localhost:5174/');
+    // Use index 5 for a stable date offset that avoids intermittent empty-slot selections in CI
     await navigateToBookingForm(page, 5, -1);
     await page.locator('#fs-name').fill('Jane Smith');
     await page.locator('#fs-email').fill('jane.smith@example.com');
