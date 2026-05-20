@@ -61,12 +61,19 @@ export async function createStore(
       });
     }
     case 'd1': {
-      // Placeholder — d1Store lands in Phase 2 of the Workers port.
-      // See docs/CLOUDFLARE_WORKERS.md for the roadmap.
-      throw new Error(
-        "Store backend 'd1' is not yet implemented. " +
-        'See docs/CLOUDFLARE_WORKERS.md for the rollout plan.',
-      );
+      // Cloudflare D1 backend. Used by `src/worker.ts`.
+      // The d1Database binding comes from the Workers `env.DB` (or
+      // whatever name is configured in `wrangler.toml`).
+      if (!options.d1Database) {
+        throw new Error(
+          "Store backend 'd1' requires options.d1Database (the D1 binding from env). " +
+          'See docs/CLOUDFLARE_WORKERS.md.',
+        );
+      }
+      const mod = await import('./d1Store');
+      return new mod.D1Store(options.d1Database, {
+        dateOffsetProvider: options.dateOffsetProvider,
+      });
     }
     default:
       throw new Error(`Unsupported store backend: ${backend}`);

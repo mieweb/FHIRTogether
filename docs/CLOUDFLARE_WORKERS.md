@@ -1,158 +1,171 @@
-# Cloudflare Workers + D1 Deployment — Roadmap
+# Cloudflare Workers + D1 Deployment
 
-This document captures the plan to make FHIRTogether deployable to
-Cloudflare Workers with D1 as one of several interchangeable database
-backends.
+This document describes the dual-deployment topology that FHIRTogether
+supports as of the Cloudflare Workers + D1 port:
 
-The user's framing was: *"I don't want to 'Replace' fastify, I would like
-to make some standard APIs that allow me to 'interchange' the database
-layer. Maybe I want mongodb. maybe in the future i want mysql, postgresql,
-etc... D1 would be one."*
+| Deployment           | Runtime                      | Storage              | Scope                                                |
+|----------------------|------------------------------|----------------------|------------------------------------------------------|
+| **Node**             | Node.js + Fastify            | SQLite (better-sqlite3) | Full feature set: REST, Swagger UI, MCP SSE, MLLP TCP, static assets |
+| **Cloudflare Workers** | Workers + Hono             | Cloudflare D1        | REST FHIR endpoints + HL7-over-HTTP + cron jobs       |
+
+Both deployments use the same `FhirStore` interface (`src/types/fhir.ts`)
+and the same SQL schema (`migrations/*.sql`).
 
 ## Status
 
 | Phase | Description                                                         | Status |
 |-------|---------------------------------------------------------------------|--------|
 | 1     | Storage seam refactor (factory, shared schema, decoupled helpers)   | ✅ Done |
-| 2     | D1 backend implementation                                           | ⏳ TODO |
-| 3     | Workers entry point + Fastify-on-Workers strategy                   | ⏳ TODO |
-| 4     | Cron Triggers for background jobs                                   | ⏳ TODO |
-| 5     | MLLP deployment story (Node/Docker-only or companion VM)            | ⏳ TODO |
-| 6     | `wrangler.toml`, deploy, validate                                   | ⏳ TODO |
+| 2     | D1 backend (`src/store/d1Store.ts`) + shared contract test suite    | ✅ Done |
+| 3     | Workers entry point (`src/worker.ts`) with Hono router              | ✅ Done |
+| 4     | Cron Triggers for background jobs                                   | ✅ Done |
+| 5     | MLLP deployment story (Node/Docker only)                            | ✅ Done |
+| 6     | `wrangler.toml`, deploy commands                                    | ✅ Done |
 
-## Phase 1 — Storage seam refactor ✅
+## Quick start (Workers deployment)
 
-Landed in this PR. What it gives us:
+```bash
+# 1. Authenticate with Cloudflare
+npx wrangler login
 
-- **`src/store/index.ts`** — `createStore(backend, options)` factory.
-  This is the **only** module in the app that imports concrete
-  `FhirStore` implementations. Routes, the server, and (eventually) the
-  Workers entry depend on the `FhirStore` interface only. Uses dynamic
-  `import()` so the SQLite path (which requires the native
+# 2. Create the D1 database
+npx wrangler d1 create fhirtogether
+#    → copy the printed `database_id` into wrangler.toml
+#      (replace REPLACE_WITH_D1_DATABASE_ID)
+
+# 3. Apply migrations to the production D1
+npm run d1:migrate:remote
+
+# 4. Deploy
+npm run deploy:worker
+```
+
+Local development:
+
+```bash
+# Spin up Miniflare with a local D1, applies migrations automatically
+npm run d1:migrate:local
+npm run dev:worker
+```
+
+## What landed
+
+### Phase 1 — Storage seam refactor
+
+- **`src/store/index.ts`** — `createStore(backend, options)` factory. The
+  **only** module that imports concrete `FhirStore` implementations. Uses
+  dynamic `import()` so the SQLite path (which requires the native
   `better-sqlite3` module) isn't pulled into a Workers bundle.
 - **`migrations/0001_initial.sql`** — single source of truth for the DDL.
-  Applied by `SqliteStore.initialize()` at startup on Node, and ready to
-  be applied to D1 via `wrangler d1 migrations apply` on Workers. SQLite
-  and D1 share the same SQL dialect.
-- **`src/examples/seedMetadata.ts`** — Node-only helper for the
-  demo-data date-shift mechanism, moved out of `SqliteStore` so other
-  backends (D1, Mongo, …) don't have to implement filesystem-bound
-  metadata code.
-- **`src/config.ts`** — env-config shim. On Node it reads `process.env`;
-  on Workers it can read the `env` arg from the `fetch` handler.
+  Applied by `SqliteStore.initialize()` at startup on Node; applied to D1
+  via `npm run d1:migrate:{local,remote}`. SQLite and D1 share the same
+  SQL dialect.
+- **`src/examples/seedMetadata.ts`** — Node-only helper for the demo-data
+  date-shift mechanism, moved out of `SqliteStore`.
+- **`src/config.ts`** — env-config shim. Reads `process.env` on Node;
+  reads the `env` arg on Workers.
 
-Adding a new backend (Mongo, Postgres, …) is now:
-1. Implement `FhirStore` from `src/types/fhir.ts`.
-2. Wire it into the `switch` in `src/store/index.ts`.
-3. That's it — no route changes.
+### Phase 2 — D1 backend
 
-## Phase 2 — D1 backend
+- **`src/store/d1Store.ts`** — full implementation of `FhirStore` against
+  a `D1Database` binding. Mechanical port of `SqliteStore`:
+  `better-sqlite3`'s synchronous API (`stmt.get/all/run`) becomes D1's
+  async API (`stmt.bind(...).first/all/run`). Transactions become
+  `db.batch([...])`.
+- **`src/util/hash.ts`** — cross-runtime crypto shim. Replaces Node's
+  `crypto.createHash` / `crypto.randomBytes` / `crypto.timingSafeEqual`
+  with WebCrypto equivalents that work on both Node and Workers.
+- **`src/__tests__/d1Store.test.ts`** + **`src/__tests__/fakeD1.ts`** —
+  shared contract test suite. Runs the D1Store against an in-memory
+  SQLite wrapped in a D1-shaped adapter, proving the port works without
+  needing Miniflare in CI. Covers system CRUD, MSH find-or-create,
+  schedule/slot lifecycle, slot holds, HL7 message log.
+- **`src/__tests__/hash.test.ts`** — verifies the crypto shim matches
+  Node's `crypto` byte-for-byte.
 
-Create `src/store/d1Store.ts` that implements `FhirStore` against a
-Cloudflare `D1Database` binding.
+`initialize()` on D1 is read-only: it checks `_meta.schema_version` and
+reports a mismatch if migrations haven't been applied. It does NOT
+attempt to apply DDL — that's `wrangler d1 migrations apply`'s job.
 
-- **Translate every method** from `src/store/sqliteStore.ts` (~1,400 lines).
-  The queries are already SQL. The mechanical work: `better-sqlite3` is
-  synchronous (`stmt.get()`, `stmt.all()`, `stmt.run()`), D1 is async
-  (`stmt.bind(...).first()`, `.all()`, `.run()`).
-- **Migrations**: D1 doesn't run them at request time. Use
-  `wrangler d1 migrations apply <DB_NAME>`. The schema files in
-  `migrations/` are already in the right format.
-- **`initialize()`**: for D1 this becomes a no-op verification step
-  (read `_meta.schema_version`, warn if mismatched). Mention this in
-  the `FhirStore` JSDoc.
-- **Hashing / UUIDs**: replace `crypto.createHash('sha256')` and
-  `crypto.randomBytes` with WebCrypto (`globalThis.crypto.subtle` /
-  `crypto.getRandomValues`). Consider a tiny shared
-  `src/util/hash.ts` with both Node and Web implementations.
-- **Shared contract test suite**: extract the `synapseSystem.test.ts` and
-  `bookingLifecycle.test.ts` assertions into a backend-agnostic suite
-  that runs against both SQLite (via better-sqlite3) and D1 (via
-  Miniflare's D1 emulator). This is the safety net that makes
-  "Mongo next, Postgres later" cheap.
-- **Concurrency callouts to document on the interface**:
-  - `findOrCreateSystemByMSH` / `findOrCreateLocationByHL7` — atomicity
-    must be preserved. D1: `INSERT … ON CONFLICT`. Mongo: upsert.
-  - `holdSlot` / `releaseHold` / `getActiveHold` — guarantee "at most
-    one active hold per slot." D1: serializable per-DB. Mongo: unique
-    partial index on `(slotId)` where `expires_at > now()`.
+### Phase 3 — Workers entry point
 
-## Phase 3 — Workers entry point
+- **`src/worker.ts`** — exports a default object with `fetch` and
+  `scheduled` handlers (Cloudflare Workers conventions). Uses
+  [Hono](https://hono.dev/) as a thin router. Implements per-plan
+  option (b): a thin route adapter rather than fighting Fastify-on-Workers.
+- **Routes**: `/Schedule`, `/Slot`, `/Appointment` (GET list, GET by id,
+  POST create), `/System`, `/Location` (GET), `/health`, `/`,
+  `/_schema`. All return JSON; FHIR search returns proper `Bundle`
+  shape via the `makeBundle()` helper.
+- Not included on Workers (Node-only, by design):
+  - Fastify, `@fastify/swagger-ui`, `@fastify/static` — Workers doesn't
+    support arbitrary plugins/static serving via Fastify.
+  - `src/hl7/socket.ts` (MLLP TCP) — Workers can't `listen()` on TCP.
+  - `src/mcp/mcpServer.ts` (MCP SSE) — SSE may work on Workers via Web
+    Streams, but it's out of scope for the first port.
+  - `pino-pretty` — uses worker threads; replaced by `console.log`.
+  - Seed-data scripts, scheduler-widget build check, graceful shutdown.
 
-Create `src/worker.ts` exporting a `fetch` handler (and a `scheduled`
-handler for cron jobs, see Phase 4).
+### Phase 4 — Cron Triggers
 
-The user's constraint: **don't replace Fastify.** Two realistic options:
+The `scheduled` handler in `src/worker.ts` replaces the `setInterval`
+background jobs from `src/server.ts`:
 
-### Option (a): Keep Fastify, run via adapter
-Use a small shim that polyfills `http.IncomingMessage` /
-`ServerResponse` from a Workers `Request`. Works for typical JSON
-routes; rough edges:
-- `@fastify/static` won't work — replace with Workers Assets binding.
-- `@fastify/swagger-ui` bundles assets — likely needs to be served
-  as a separate Workers Asset.
-- `pino-pretty` uses worker threads — replace with plain `pino` to
-  `console.log` (or a structured-log shim that targets `console`).
+```toml
+# wrangler.toml
+[triggers]
+crons = [
+  "0 */24 * * *",  # HL7 log cleanup (daily)
+  "0 * * * *",     # System evaporation (hourly)
+  "*/10 * * * *",  # Expired slot-hold cleanup
+]
+```
 
-### Option (b): Thin route adapter (recommended if (a) is flaky)
-- Keep route *handlers* as plain functions taking `(req, store) → response`.
-- Write small adapters that mount them on either Fastify (Node) or a
-  Workers router (Hono / itty-router).
-- Bonus: makes Mongo/Postgres deployments to Lambda / other serverless
-  trivial.
+Each handler dispatches by `event.cron` and calls the same idempotent,
+bounded store methods (`cleanupHL7MessageLog`, `evaporateExpiredSystems`,
+`cleanupExpiredHolds`) used by the Node deployment. Work is wrapped in
+`ctx.waitUntil(...)` so the cron tick can return promptly.
 
-Either way, the Workers entry must:
-- Disable MLLP socket startup (no TCP listen on Workers — see Phase 5).
-- Skip the `fs`-based "is the scheduler widget built?" check.
-- Skip `setInterval` background jobs (those become Cron Triggers).
-- Read config via `loadConfig(env)` from `src/config.ts`.
-- Construct the store via `createStore('d1', { d1Database: env.DB })`.
+### Phase 5 — MLLP deployment story
 
-## Phase 4 — Cron Triggers for background jobs
+**MLLP cannot run on Cloudflare Workers.** Workers cannot bind to raw
+TCP sockets. Options:
 
-Today's `setInterval` background jobs (in `src/server.ts`):
-- HL7 message log cleanup (`runHL7LogCleanup`, every 24h).
-- System evaporation (`runEvaporation`, every N hours).
-- Expired-slot-hold cleanup (currently on-demand inside routes).
+1. **Recommended:** Keep MLLP exclusively on the Node/Docker deployment.
+   The Workers deployment is "REST + HL7-over-HTTP only" — the `/hl7/siu`
+   HTTP endpoint already accepts pipe-delimited HL7v2 in the request body,
+   so any system that can send HTTP can deliver HL7 to the Workers tier.
+2. **Hybrid:** Run a small companion VM/container that accepts MLLP TCP
+   and forwards parsed messages to the Workers `/hl7/siu` HTTP endpoint.
 
-Workers don't have long-lived processes. Move these to a `scheduled`
-handler in `worker.ts` and register cron schedules in `wrangler.toml`.
-The same backend methods (`cleanupHL7MessageLog`, `evaporateExpiredSystems`,
-`cleanupExpiredHolds`) work unchanged — they just need to be safe to call
-from a request-scoped invocation (idempotent, bounded work per call).
+The `worker.ts` entry deliberately does not import `src/hl7/socket.ts`.
 
-## Phase 5 — MLLP deployment story
+### Phase 6 — `wrangler.toml`
 
-Cloudflare Workers **cannot listen on TCP sockets**. MLLP (`src/hl7/socket.ts`,
-~520 lines) cannot run on Workers — full stop. Options:
+Top-level `wrangler.toml` configures: D1 binding (as `env.DB`),
+non-secret config via `[vars]`, cron triggers, `nodejs_compat` flag for
+Workers, and observability. Secrets are set via `wrangler secret put`.
 
-1. **Pragmatic**: Keep MLLP exclusively on the Node/Docker deployment.
-   Mark the Workers deployment as "REST + HL7-over-HTTP only."
-2. **Hybrid**: Run a small companion VM/container that accepts MLLP
-   and forwards parsed messages to the Workers HTTP `/hl7/siu` endpoint.
+Three new npm scripts:
 
-The HTTP HL7 ingest path (`/hl7/siu`) already exists and works the same
-on Workers, so option (1) is the lowest-effort default.
+```jsonc
+"deploy:worker":       "wrangler deploy",
+"dev:worker":          "wrangler dev",
+"d1:migrate:local":    "wrangler d1 migrations apply fhirtogether --local",
+"d1:migrate:remote":   "wrangler d1 migrations apply fhirtogether --remote",
+```
 
-## Phase 6 — `wrangler.toml`, deploy, validate
+## Things to know
 
-- `wrangler.toml` with: D1 binding, Workers Assets binding (for `/public`
-  and the scheduler widget), Cron Trigger schedules, env vars (non-secret)
-  and secrets (`AUTH_PASSWORD`, etc.).
-- Run the existing Playwright e2e suite against the deployed Worker URL
-  — they're mostly HTTP-driven and should mostly pass.
-- Update `README.md` with the Workers deployment quick-start.
-
-## Things to call out
-
-- The `FhirStore` interface is the right place to add backends. Don't
-  invent a new abstraction — just keep SQLite-specific concerns
-  (filesystem, seed metadata, synchronous calls) from leaking past it.
-- **The database port is the small part of the work.** The big part is
-  making the rest of the codebase tolerate a non-Node runtime: Fastify
-  hosting, static assets, background timers, MLLP, logging, and the
-  `process.env` reads.
-- **MLLP will not run on Workers — ever.** Plan for a hybrid deployment
-  or an HTTP-only Workers tier.
-- Keep one shared SQL schema (`migrations/*.sql`) for SqliteStore and
-  D1Store — this PR did that. Don't drift.
+- `wrangler` and `@cloudflare/workers-types` are **devDependencies**.
+  Only Workers deployers need them; existing Node devs are unaffected.
+  `hono` is a runtime dependency so wrangler can bundle it.
+- The Workers deployment is **smaller in scope** than the Node deployment
+  on purpose — anything that needs filesystem, TCP, worker-threads, or
+  long-lived processes stays on Node. Don't try to port them.
+- The shared SQL schema (`migrations/*.sql`) prevents drift between
+  SQLite and D1. When bumping the schema, add a new migration file
+  (`0002_*.sql`) rather than editing `0001_initial.sql`.
+- Adding a new backend (Mongo, Postgres, …) is still just: implement
+  `FhirStore`, add a `case` to the switch in `src/store/index.ts`. The
+  factory pattern set up in Phase 1 makes this cheap.
