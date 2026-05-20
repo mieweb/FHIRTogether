@@ -953,7 +953,7 @@ export class D1Store implements FhirStore {
   // ==================== HELPER METHODS ====================
 
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   private extractId(reference: string): string {

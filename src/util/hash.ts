@@ -67,17 +67,16 @@ export async function sha256Hex(input: string): Promise<string> {
  * Equivalent to: `crypto.randomBytes(n).toString('hex')`.
  */
 export function randomHex(byteLength: number): string {
-  const buf = new Uint8Array(byteLength);
   const webCrypto = (globalThis as { crypto?: MinimalCrypto }).crypto;
   if (webCrypto?.getRandomValues) {
+    const buf = new Uint8Array(byteLength);
     webCrypto.getRandomValues(buf);
-  } else {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
-    const nodeBuf = nodeCrypto.randomBytes(byteLength);
-    return nodeBuf.toString('hex');
+    return bytesToHex(buf);
   }
-  return bytesToHex(buf);
+  // Node fallback — only reached if WebCrypto is unavailable.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+  return nodeCrypto.randomBytes(byteLength).toString('hex');
 }
 
 /**
