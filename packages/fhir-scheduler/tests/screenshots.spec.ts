@@ -175,8 +175,8 @@ test.describe('Documentation Screenshots', () => {
     await page.getByRole('option').nth(dateIndex).click();
     const slotLocator = page.getByRole('region', { name: 'Available times' }).getByRole('option');
     await expect(slotLocator.first()).toBeVisible({ timeout: 10000 });
+    // Use last() when slotIndex is -1 to avoid slot conflicts
     if (slotIndex === -1) {
-      // Use last() when slotIndex is -1 to avoid slot conflicts
       await slotLocator.last().click();
     } else {
       await slotLocator.nth(slotIndex).click();

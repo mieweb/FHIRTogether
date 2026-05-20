@@ -105,7 +105,7 @@ test.describe('FHIR Scheduler Widget', () => {
     
     // Select a date further out to avoid slot conflicts
     await expect(page.getByRole('option').first()).toBeVisible({ timeout: 10000 });
-    // Use index 5 to keep this test on the same stable date offset used by other passing booking-flow tests
+    // Use index 5 to align with the stable booking-date offset already used in the follow-up booking-form test
     await page.getByRole('option').nth(5).click();
     
     // Select last available time slot to avoid conflicts with other tests
