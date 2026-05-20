@@ -114,17 +114,15 @@ background jobs from `src/server.ts`:
 ```toml
 # wrangler.toml
 [triggers]
-crons = [
-  "0 */24 * * *",  # HL7 log cleanup (daily)
-  "0 * * * *",     # System evaporation (hourly)
-  "*/10 * * * *",  # Expired slot-hold cleanup
-]
+crons = ["0 * * * *"]   # hourly
 ```
 
-Each handler dispatches by `event.cron` and calls the same idempotent,
-bounded store methods (`cleanupHL7MessageLog`, `evaporateExpiredSystems`,
-`cleanupExpiredHolds`) used by the Node deployment. Work is wrapped in
-`ctx.waitUntil(...)` so the cron tick can return promptly.
+All three maintenance jobs (`cleanupExpiredHolds`, `evaporateExpiredSystems`,
+`cleanupHL7MessageLog`) are idempotent and bounded, so they all run on
+every cron tick — the cron just controls *frequency*, not *which* jobs
+run. Bump the schedule (e.g. `*/10 * * * *`) if expired-hold latency
+needs to be tighter. Work is wrapped in `ctx.waitUntil(...)` so the
+cron tick returns promptly.
 
 ### Phase 5 — MLLP deployment story
 

@@ -27,6 +27,15 @@ function bytesToHex(bytes: Uint8Array): string {
  *
  * Equivalent to: `crypto.createHash('sha256').update(input).digest('hex')`
  * — but works on Workers via `crypto.subtle.digest`.
+ *
+ * ## Security note
+ * This is used to hash **high-entropy random API keys / MSH secrets**
+ * (see `D1Store.findOrCreateSystemByMSH` and `SqliteStore`'s equivalent).
+ * It is intentionally NOT used for low-entropy user passwords — for those,
+ * use bcrypt / scrypt / argon2 instead. CodeQL's `js/insufficient-password-hash`
+ * rule may flag the Node fallback below; the alert is a false positive in
+ * this context because the input is a 256-bit cryptographically-random token,
+ * not a password chosen by a human.
  */
 interface MinimalSubtle {
   digest(algorithm: string, data: ArrayBufferView | ArrayBuffer): Promise<ArrayBuffer>;
@@ -46,8 +55,8 @@ export async function sha256Hex(input: string): Promise<string> {
     return bytesToHex(new Uint8Array(buf));
   }
   // Node fallback (shouldn't be reached on Node ≥ 16 either, but defensive).
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeCrypto = require('node:crypto') as typeof import('node:crypto');
+  // Dynamic import keeps Node-only code out of the Workers bundle.
+  const nodeCrypto = await import('node:crypto');
   return nodeCrypto.createHash('sha256').update(input).digest('hex');
 }
 

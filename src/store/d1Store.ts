@@ -833,9 +833,11 @@ export class D1Store implements FhirStore {
       throw new Error(`Slot ${slotId} is already held by another user`);
     }
 
-    // Create new hold
+    // Create new hold. Hold tokens are bearer credentials — anyone with
+    // the token can release the hold — so they must be unguessable.
+    // Use cryptographically-secure random bytes (16 = 128 bits of entropy).
     const id = this.generateId();
-    const holdToken = `hold-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const holdToken = `hold-${randomHex(16)}`;
     const now = toNaiveISO(new Date());
     const expiresAt = toNaiveISO(new Date(Date.now() + durationMinutes * 60 * 1000));
 

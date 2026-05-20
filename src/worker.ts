@@ -238,11 +238,13 @@ export default {
    * `setInterval` background jobs from `src/server.ts` with idempotent,
    * bounded calls into the store.
    *
-   *   "0 *\/24 * * *"  → HL7 message-log cleanup (daily)
-   *   "0 * * * *"      → System evaporation        (hourly)
-   *   "*\/10 * * * *"  → Expired slot-hold cleanup (every 10 min)
+   * All three jobs are idempotent and bounded, so we run all of them on
+   * every cron tick rather than coupling this handler to specific cron
+   * strings in `wrangler.toml`. The cron schedule controls *frequency*
+   * (set in wrangler.toml: hourly is enough for the heaviest job), not
+   * *which* jobs run.
    */
-  async scheduled(event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
+  async scheduled(_event: ScheduledEvent, env: WorkerEnv, ctx: ExecutionContext): Promise<void> {
     const cfg = loadConfig(env as Record<string, string | undefined>);
     const store = await buildStore(env);
 
@@ -250,21 +252,14 @@ export default {
     ctx.waitUntil(
       (async () => {
         try {
-          // Each job decides whether to run based on which cron schedule fired.
-          // Even if a job runs on the "wrong" cron, the work is idempotent and
-          // bounded — so the worst case is redundant work, not corruption.
-          if (event.cron === '0 */24 * * *' || event.cron === '0 0 * * *') {
-            const n = await store.cleanupHL7MessageLog(cfg.hl7MessageLogRetentionDays);
-            console.log(`[cron] HL7 log cleanup: ${n} rows deleted`);
-          }
-          if (event.cron === '0 * * * *') {
-            const r = await store.evaporateExpiredSystems();
-            if (r.count > 0) console.log(`[cron] Evaporated ${r.count} expired system(s)`);
-          }
-          if (event.cron === '*/10 * * * *') {
-            const n = await store.cleanupExpiredHolds();
-            if (n > 0) console.log(`[cron] Cleaned up ${n} expired slot hold(s)`);
-          }
+          const expiredHolds = await store.cleanupExpiredHolds();
+          if (expiredHolds > 0) console.log(`[cron] Cleaned up ${expiredHolds} expired slot hold(s)`);
+
+          const evapResult = await store.evaporateExpiredSystems();
+          if (evapResult.count > 0) console.log(`[cron] Evaporated ${evapResult.count} expired system(s)`);
+
+          const logRows = await store.cleanupHL7MessageLog(cfg.hl7MessageLogRetentionDays);
+          if (logRows > 0) console.log(`[cron] HL7 log cleanup: ${logRows} rows deleted`);
         } catch (err) {
           console.error('[cron] handler failed:', err);
         }
