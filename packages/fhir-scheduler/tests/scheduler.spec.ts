@@ -165,7 +165,7 @@ test.describe('FHIR Scheduler Widget', () => {
     
     // Select a date further out to avoid conflicts
     await expect(page.getByRole('option').first()).toBeVisible({ timeout: 10000 });
-    await page.getByRole('option').nth(7).click();
+    await page.getByRole('option').nth(5).click();
     
     // Select last time slot to avoid conflicts
     const availableTimes = page.getByRole('region', { name: 'Available times' }).getByRole('option');

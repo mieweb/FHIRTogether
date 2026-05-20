@@ -273,7 +273,7 @@ test.describe('Documentation Screenshots', () => {
   test('06-booking-filled: Completed form', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await page.goto('http://localhost:5174/');
-    await navigateToBookingForm(page, 17, -1);
+    await navigateToBookingForm(page, 5, -1);
     await page.locator('#fs-name').fill('Jane Smith');
     await page.locator('#fs-email').fill('jane.smith@example.com');
     await page.locator('#fs-phone').fill('(555) 123-4567');
