@@ -57,6 +57,7 @@ jobs:
   scheduler-e2e:
     name: Scheduler Widget E2E
     runs-on: ubuntu-latest
+    needs: e2e-tests
 
     steps:
       - uses: actions/checkout@v5
@@ -78,7 +79,7 @@ jobs:
       - name: Start backend server
         run: |
           set -euo pipefail
-          node dist/server.js > backend.log 2>&1 &
+          ENABLE_TEST_ENDPOINTS=true node dist/server.js > backend.log 2>&1 &
           echo $! > backend.pid
 
       - name: Wait for backend
