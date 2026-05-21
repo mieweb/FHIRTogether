@@ -47,6 +47,10 @@ jobs:
 
       - run: npm run test:e2e
 
+      - name: Restore base test data
+        if: always()
+        run: npm run generate-data
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
@@ -92,6 +96,10 @@ jobs:
         if: always()
         run: |
           if [ -f backend.pid ]; then kill "$(cat backend.pid)" || true; fi
+
+      - name: Restore base test data
+        if: always()
+        run: npm run generate-data
 
       - name: Upload backend log
         if: failure()
