@@ -3,7 +3,7 @@ name: Build and Deploy Production
 on:
   push:
     branches:
-      - master
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -55,7 +55,7 @@ jobs:
           API_URL: ${{ secrets.LAUNCHPAD_API_URL }}
         run: |
           REPO_NAME=$(basename "${{ github.repository }}")
-          CONTAINER_NAME="${{ github.repository_owner }}-${REPO_NAME}-master"
+          CONTAINER_NAME="${{ github.repository_owner }}-${REPO_NAME}-main"
           CONTAINER_NAME=${CONTAINER_NAME,,}
           CONTAINER_NAME=$(echo "$CONTAINER_NAME" | sed 's/[^a-z0-9-]/-/g')
 
