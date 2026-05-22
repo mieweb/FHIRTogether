@@ -23,6 +23,10 @@ WORKDIR /app
 # Copy the rest of the application code
 COPY . .
 
+# Build the TypeScript server
+WORKDIR /app
+RUN npm run build:server
+
 # Build the fhir-scheduler standalone bundle
 WORKDIR /app/packages/fhir-scheduler
 RUN npm run build:standalone
@@ -30,8 +34,9 @@ RUN npm run build:standalone
 # Go back to root
 WORKDIR /app
 
-# Expose the application port
+LABEL org.mieweb.opensource-server.services.http.default-port=4010
+
 EXPOSE 4010
 
-# Set the default command to run the application
-CMD ["npm", "run", "dev"]
+ENV NODE_ENV=production
+CMD ["node", "dist/server.js"]

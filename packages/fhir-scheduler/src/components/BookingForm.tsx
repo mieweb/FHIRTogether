@@ -57,20 +57,20 @@ function HoldTimer({ expiresAt }: { expiresAt: Date }) {
   const [remaining, setRemaining] = useState<number>(
     Math.max(0, expiresAt.getTime() - Date.now())
   );
-  
+
   useEffect(() => {
     const timer = setInterval(() => {
       setRemaining(Math.max(0, expiresAt.getTime() - Date.now()));
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [expiresAt]);
-  
+
   const minutes = Math.floor(remaining / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
-  
+
   const isWarning = remaining < 60000; // Less than 1 minute
-  
+
   return (
     <div className={`fs-hold-timer ${isWarning ? 'fs-timer-warning' : ''}`}>
       <svg className="fs-timer-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -91,18 +91,12 @@ function HoldTimer({ expiresAt }: { expiresAt: Date }) {
  */
 function isFieldAnswered(field: Record<string, unknown>): boolean {
   const fieldType = field.fieldType as string;
-  
+
   // Skip section headers - they don't need answers
   if (fieldType === 'section') {
     return true;
   }
-  
-  // Check if field is hidden by enableWhen logic
-  // The forms-engine uses 'visible' property to track visibility
-  if (field.visible === false) {
-    return true; // Hidden fields don't need answers
-  }
-  
+
   switch (fieldType) {
     case 'text':
     case 'longtext':
@@ -121,12 +115,52 @@ function isFieldAnswered(field: Record<string, unknown>): boolean {
   }
 }
 
+type EnableWhenCondition = { targetId: string; operator: string; value: string };
+type EnableWhen = { logic?: string; conditions: EnableWhenCondition[] };
+
+function evaluateCondition(condition: EnableWhenCondition, fieldsMap: Map<string, Record<string, unknown>>): boolean {
+  const targetField = fieldsMap.get(condition.targetId);
+  if (!targetField) return true;
+  const { operator, value } = condition;
+  const selected = targetField.selected;
+  switch (operator) {
+    case 'equals': return selected === value;
+    case 'notEquals': return selected !== value;
+    case 'includes': return Array.isArray(selected) ? selected.includes(value) : selected === value;
+    case 'notIncludes': return Array.isArray(selected) ? !selected.includes(value) : selected !== value;
+    default: return true;
+  }
+}
+
+function isFieldVisible(field: Record<string, unknown>, fieldsMap: Map<string, Record<string, unknown>>): boolean {
+  const enableWhen = field.enableWhen as EnableWhen | undefined;
+  if (!enableWhen || !Array.isArray(enableWhen.conditions) || enableWhen.conditions.length === 0) return true;
+  const results = enableWhen.conditions.map((c) => evaluateCondition(c, fieldsMap));
+  return ((enableWhen.logic ?? 'AND').toUpperCase() === 'AND') ? results.every(Boolean) : results.some(Boolean);
+}
+
+function flattenFields(fields: Record<string, unknown>[]): Record<string, unknown>[] {
+  const result: Record<string, unknown>[] = [];
+  for (const field of fields) {
+    result.push(field);
+    if (field.fieldType === 'section' && Array.isArray(field.fields)) {
+      result.push(...flattenFields(field.fields as Record<string, unknown>[]));
+    }
+  }
+  return result;
+}
+
 /**
  * Check if all required fields in the questionnaire are complete
- * The fields array from forms-engine is flat (not nested), so we check each directly
+ * Flattens section children and skips fields hidden by enableWhen conditions
  */
 function isQuestionnaireComplete(fields: Record<string, unknown>[]): boolean {
-  return fields.every((field) => isFieldAnswered(field));
+  const allFields = flattenFields(fields);
+  const fieldsMap = new Map(allFields.map((f) => [f.id as string, f]));
+  return allFields
+    .filter((field) => field.fieldType !== 'section')
+    .filter((field) => isFieldVisible(field, fieldsMap))
+    .every((field) => isFieldAnswered(field));
 }
 
 /**
@@ -142,29 +176,29 @@ interface QuestionnaireSectionProps {
 function QuestionnaireSection({ questionnaireFormData, disabled, onCompletionChange }: QuestionnaireSectionProps) {
   const setQuestionnaireResponse = useSchedulerStore((state) => state.setQuestionnaireResponse);
   const storeRef = useRef<{ getState: () => { order: string[]; byId: Record<string, FormField> } } | null>(null);
-  
+
   // Handle form changes and build FHIR QuestionnaireResponse
-  const handleQuestionnaireChange = useCallback((_updatedFormData: unknown) => {
-    if (!storeRef.current) return;
-    
+  const handleQuestionnaireChange = useCallback((updatedFormData: unknown) => {
     try {
-      const state = storeRef.current.getState();
-      const fields: FormField[] = state.order.map((id: string) => state.byId[id]);
-      const response = toFhirQuestionnaireResponse(fields, 'intake-questionnaire');
-      
-      // Convert to our QuestionnaireResponse type
-      setQuestionnaireResponse(response as import('../types').QuestionnaireResponse);
-      
+      const formDataFields = (updatedFormData as { fields?: Record<string, unknown>[] })?.fields ?? [];
+
+      if (storeRef.current) {
+        const state = storeRef.current.getState();
+        const storeFields: FormField[] = state.order.map((id: string) => state.byId[id]);
+        const response = toFhirQuestionnaireResponse(storeFields, 'intake-questionnaire');
+        setQuestionnaireResponse(response as import('../types').QuestionnaireResponse);
+      }
+
       // Check completion status and notify parent
       if (onCompletionChange) {
-        const isComplete = isQuestionnaireComplete(fields as Record<string, unknown>[]);
-        onCompletionChange(isComplete, fields);
+        const isComplete = isQuestionnaireComplete(formDataFields);
+        onCompletionChange(isComplete, formDataFields as unknown as FormField[]);
       }
     } catch (err) {
       console.warn('Failed to build questionnaire response:', err);
     }
   }, [setQuestionnaireResponse, onCompletionChange]);
-  
+
   // If forms-renderer is not available, show a placeholder
   if (!QuestionnaireRenderer) {
     return (
@@ -176,7 +210,7 @@ function QuestionnaireSection({ questionnaireFormData, disabled, onCompletionCha
       </div>
     );
   }
-  
+
   return (
     <div className="fs-questionnaire-section">
       <h3 className="fs-section-title">Additional Questions</h3>
@@ -214,7 +248,7 @@ export function BookingForm({
     dateOfBirth: '',
     reason: '',
   });
-  
+
   const [validationErrors, setValidationErrors] = useState<Partial<Record<keyof PatientInfo | 'questionnaire', string>>>({});
   // If questionnaire was already completed in a previous step, consider it complete
   // If questionnaireFormData is passed (for inline display), we need to track completion
@@ -223,7 +257,7 @@ export function BookingForm({
   );
   // Store questionnaire fields for provider routing/screening (can be accessed via onQuestionnaireChange callback)
   const [, setQuestionnaireFields] = useState<unknown[]>([]);
-  
+
   // Track questionnaire completion
   const handleQuestionnaireCompletionChange = useCallback((isComplete: boolean, fields: unknown[]) => {
     setQuestionnaireComplete(isComplete);
@@ -233,7 +267,7 @@ export function BookingForm({
       setValidationErrors((prev) => ({ ...prev, questionnaire: undefined }));
     }
   }, [validationErrors.questionnaire]);
-  
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const { name, value } = e.target;
@@ -245,50 +279,50 @@ export function BookingForm({
     },
     [validationErrors]
   );
-  
+
   const validate = useCallback((): boolean => {
     const errors: Partial<Record<keyof PatientInfo | 'questionnaire', string>> = {};
-    
+
     // Skip patient info validation if questionnaire was already completed
     // (patient info should be in the questionnaire)
     if (!questionnaireAlreadyCompleted) {
       if (!formData.name.trim()) {
         errors.name = 'Name is required';
       }
-      
+
       if (!formData.email.trim()) {
         errors.email = 'Email is required';
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
         errors.email = 'Please enter a valid email address';
       }
-      
+
       if (!formData.phone.trim()) {
         errors.phone = 'Phone number is required';
       }
     }
-    
+
     // Validate questionnaire completion if questionnaire is provided inline
     if (questionnaireFormData && !questionnaireComplete) {
       errors.questionnaire = 'Please complete all questions before booking';
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   }, [formData, questionnaireFormData, questionnaireComplete, questionnaireAlreadyCompleted]);
-  
+
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      
+
       if (!validate()) {
         return;
       }
-      
+
       await onSubmit(formData);
     },
     [formData, validate, onSubmit]
   );
-  
+
   return (
     <div className="fs-booking-form">
       <header className="fs-form-header">
@@ -305,10 +339,10 @@ export function BookingForm({
         </button>
         <h2 className="fs-form-title">Complete Your Booking</h2>
       </header>
-      
+
       {/* Hold Timer */}
       {holdExpiresAt && <HoldTimer expiresAt={holdExpiresAt} />}
-      
+
       {/* Appointment Summary */}
       <div className="fs-appointment-summary">
         <h3 className="fs-summary-title">Appointment Details</h3>
@@ -327,7 +361,7 @@ export function BookingForm({
           </div>
         </dl>
       </div>
-      
+
       {/* Error Display */}
       {error && (
         <div className="fs-error-message" role="alert">
@@ -340,14 +374,14 @@ export function BookingForm({
           <span>{error}</span>
         </div>
       )}
-      
+
       {/* Patient Information Form */}
       <form onSubmit={handleSubmit} className="fs-patient-form">
         {/* Only show patient info fields if questionnaire wasn't already completed */}
         {!questionnaireAlreadyCompleted && (
           <>
             <h3 className="fs-section-title">Your Information</h3>
-            
+
             <div className="fs-form-group">
               <label htmlFor="fs-name" className="fs-label">
                 Full Name <span className="fs-required">*</span>
@@ -369,7 +403,7 @@ export function BookingForm({
                 </span>
               )}
             </div>
-            
+
             <div className="fs-form-group">
               <label htmlFor="fs-email" className="fs-label">
                 Email <span className="fs-required">*</span>
@@ -391,7 +425,7 @@ export function BookingForm({
                 </span>
               )}
             </div>
-            
+
             <div className="fs-form-group">
               <label htmlFor="fs-phone" className="fs-label">
                 Phone Number <span className="fs-required">*</span>
@@ -413,7 +447,7 @@ export function BookingForm({
                 </span>
               )}
             </div>
-            
+
             <div className="fs-form-group">
               <label htmlFor="fs-dob" className="fs-label">
                 Date of Birth
@@ -428,7 +462,7 @@ export function BookingForm({
                 disabled={loading}
               />
             </div>
-            
+
             <div className="fs-form-group">
               <label htmlFor="fs-reason" className="fs-label">
                 Reason for Visit
@@ -445,7 +479,7 @@ export function BookingForm({
             </div>
           </>
         )}
-        
+
         {/* Questionnaire Section - integrates with @mieweb/forms-renderer */}
         {questionnaireFormData != null && (
           <QuestionnaireSection
@@ -454,7 +488,7 @@ export function BookingForm({
             onCompletionChange={handleQuestionnaireCompletionChange}
           />
         )}
-        
+
         {/* Questionnaire validation error */}
         {validationErrors.questionnaire && (
           <div className="fs-error-message" role="alert">
@@ -467,7 +501,7 @@ export function BookingForm({
             <span>{validationErrors.questionnaire}</span>
           </div>
         )}
-        
+
         <button
           type="submit"
           className="fs-submit-button"
@@ -517,7 +551,7 @@ export function ConnectedBookingForm({
   // Check if questionnaire was already completed in a previous step
   const questionnaireResponse = useSchedulerStore((state) => state.questionnaireResponse);
   const questionnaireAlreadyCompleted = questionnaireResponse != null;
-  
+
   const handleSubmit = useCallback(
     async (patientInfo: PatientInfo) => {
       setPatientInfo(patientInfo);
@@ -525,11 +559,11 @@ export function ConnectedBookingForm({
     },
     [setPatientInfo, submitBooking]
   );
-  
+
   if (!provider || !slot) {
     return null;
   }
-  
+
   return (
     <BookingForm
       provider={provider}
