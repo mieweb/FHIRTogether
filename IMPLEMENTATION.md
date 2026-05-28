@@ -157,7 +157,7 @@ When you run `npm run generate-data`:
 Environment variables in `.env`:
 
 ```env
-STORE_BACKEND=sqlite              # Database backend (only sqlite for now)
+STORE_BACKEND=sqlite              # Database backend (sqlite or mongo)
 PORT=4010                          # Server port
 HOST=0.0.0.0                       # Server host
 LOG_LEVEL=info                     # Logging level
@@ -225,16 +225,16 @@ curl "http://localhost:4010/Appointment?date=2025-12-09"
 
 ## 🎉 Success Criteria Met
 
-✅ **Directory Framework**: Complete src/ structure with types, store, routes, examples  
-✅ **Database Backend**: Full CRUD operations for all FHIR resources  
-✅ **API Endpoints**: All Schedule, Slot, Appointment operations implemented  
-✅ **Busy Office Example**: 3 providers, 50-60 patients/day, 30 days ahead  
-✅ **Data Generation**: Automated script with statistics reporting  
-✅ **Data Regeneration**: Can refresh stale data anytime  
+✅ **Directory Framework**: Complete src/ structure with types, store, routes, examples
+✅ **Database Backend**: Full CRUD operations for all FHIR resources
+✅ **API Endpoints**: All Schedule, Slot, Appointment operations implemented
+✅ **Busy Office Example**: 3 providers, 50-60 patients/day, 30 days ahead
+✅ **Data Generation**: Automated script with statistics reporting
+✅ **Data Regeneration**: Can refresh stale data anytime
 
 ## 🔮 Next Steps (Future Enhancements)
 
-- [ ] Add PostgreSQL, MySQL, MongoDB store implementations
+- [ ] Add PostgreSQL, MySQL store implementations
 - [ ] Implement HL7v2 SIU message ingestion
 - [ ] Add `$find-appointment` FHIR operation
 - [ ] Implement SMART-on-FHIR authentication
