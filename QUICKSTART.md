@@ -174,6 +174,10 @@ LOG_LEVEL=info
 # Database Configuration
 SQLITE_DB_PATH=./data/fhirtogether.db
 
+# MongoDB (used when STORE_BACKEND=mongo)
+# MONGO_URI=mongodb://localhost:27017
+# MONGO_DB_NAME=fhirtogether
+
 # Enable test/admin endpoints (DELETE operations)
 ENABLE_TEST_ENDPOINTS=true
 ```
@@ -184,7 +188,7 @@ The busy office example includes:
 
 - **3 Providers**:
   - Dr. Sarah Smith (Family Medicine) - 20 min appointments
-  - Dr. Michael Johnson (Internal Medicine) - 25 min appointments  
+  - Dr. Michael Johnson (Internal Medicine) - 25 min appointments
   - Dr. Emily Williams (Pediatrics) - 15 min appointments
 
 - **Appointment Volume**: ~50-60 patients per provider per day
@@ -228,7 +232,7 @@ All endpoints follow FHIR R4 specifications for:
 
 ## 🧩 Next Steps
 
-- Implement additional backend stores (PostgreSQL, MySQL, MongoDB)
+- Implement additional backend stores (PostgreSQL, MySQL)
 - Add HL7v2 message ingestion (`POST /$hl7v2-ingest`)
 - Implement `$find-appointment` operation
 - Add SMART-on-FHIR authentication

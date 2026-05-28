@@ -2,6 +2,8 @@ services:
   app:
     build: .
     init: true
+    depends_on:
+      - mongo
     ports:
       - "4010:4010"
     volumes:
@@ -12,4 +14,17 @@ services:
     environment:
       - NODE_ENV=production
       - SQLITE_DB_PATH=/app/data/fhirtogether.db
+      - MONGO_URI=mongodb://mongo:27017
+      - MONGO_DB_NAME=fhirtogether
     command: npm run dev
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:

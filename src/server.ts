@@ -7,6 +7,7 @@ import { config } from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { SqliteStore, SCHEMA_VERSION } from './store/sqliteStore';
+import { MongoStore, MONGO_SCHEMA_VERSION } from './store/mongoStore';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
@@ -171,6 +172,20 @@ async function buildServer() {
     }
 
     fastify.log.info('SQLite store initialized (schema v' + SCHEMA_VERSION + ')');
+  } else if (STORE_BACKEND === 'mongo') {
+    store = new MongoStore();
+    const schemaStatus = await store.initialize();
+
+    if (!schemaStatus.match) {
+      startupWarnings.push(
+        `⚠️  Mongo schema mismatch: database is v${schemaStatus.current}, code expects v${MONGO_SCHEMA_VERSION}`,
+        `   Auto-migrated to v${MONGO_SCHEMA_VERSION}`,
+      );
+    } else if (schemaStatus.migrated && schemaStatus.current === 0) {
+      fastify.log.info('Fresh Mongo database - schema initialized at v' + MONGO_SCHEMA_VERSION);
+    }
+
+    fastify.log.info('Mongo store initialized (schema v' + MONGO_SCHEMA_VERSION + ')');
   } else {
     throw new Error(`Unsupported store backend: ${STORE_BACKEND}`);
   }
