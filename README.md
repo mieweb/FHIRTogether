@@ -190,6 +190,9 @@ npm run dev
 
 Swagger UI: [http://localhost:4010/docs](http://localhost:4010/docs)
 
+> **Production deployment** runs the compiled server directly under **systemd** (not Docker).
+> See [Deploy with systemd](QUICKSTART.md#deploy-with-systemd) and the unit file at [`deploy/fhirtogether.service`](deploy/fhirtogether.service).
+
 ## 🧩 Pluggable Store Interface
 
 **Important:** The store interface is **not** for connecting directly to your EHR or Practice Management system. Instead, it's a **working data repository** for the scheduling portal that holds appointment data representing schedules for providers/resources.
@@ -364,4 +367,3 @@ If you're modernizing a legacy EHR or want to contribute HL7v2 mappings, backend
 ## 🛡️ Project Goal
 
 > Bring legacy scheduling infrastructure into the FHIR world — one appointment at a time.
-

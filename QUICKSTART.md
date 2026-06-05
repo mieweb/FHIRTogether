@@ -210,6 +210,27 @@ npm run build
 npm start
 ```
 
+### Deploy with systemd
+
+Production runs the compiled Node.js server directly under **systemd** (no Docker).
+The unit file lives at [`deploy/fhirtogether.service`](deploy/fhirtogether.service).
+
+```bash
+# One-time install (adjust User/paths in the unit file if needed)
+npm ci && npm run build
+sudo cp deploy/fhirtogether.service /etc/systemd/system/fhirtogether.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now fhirtogether.service
+
+# Deploy a new version
+git pull && npm ci && npm run build && sudo systemctl restart fhirtogether
+
+# Follow logs
+journalctl -u fhirtogether -f
+```
+
+Configuration is read from `.env` in the working directory (see [`.env.example`](.env.example)).
+
 ### Run Linter
 ```bash
 npm run lint

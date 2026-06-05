@@ -1,0 +1,31 @@
+# systemd unit for FHIRTogether Scheduling Synapse
+#
+# Runs the compiled Node.js server directly (no Docker). The server reads its
+# configuration from the .env file in WorkingDirectory via dotenv.
+#
+# Install (adjust User/paths if your checkout lives elsewhere):
+#   sudo cp deploy/fhirtogether.service /etc/systemd/system/fhirtogether.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now fhirtogether.service
+#
+# Deploy a new version:
+#   git pull && npm ci && npm run build && sudo systemctl restart fhirtogether
+#
+# Logs:
+#   journalctl -u fhirtogether -f
+
+[Unit]
+Description=FHIRTogether Scheduling Synapse (Node.js)
+After=network.target
+
+[Service]
+Type=simple
+User=monika
+WorkingDirectory=/home/monika/FHIRTogether
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
