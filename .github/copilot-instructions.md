@@ -39,8 +39,11 @@ The unit file is [`deploy/fhirtogether.service`](../deploy/fhirtogether.service)
 - Deploy update: `git pull && npm ci && npm run build && sudo systemctl restart fhirtogether`
 - Logs: `journalctl -u fhirtogether -f`
 
-The `Dockerfile`/`docker-compose.yml` remain for local containerized runs only;
-`docker-compose.inferno.yml` is the separate Inferno test harness.
+Production deploys are **manual** (the steps above) — there is no CI job that
+auto-deploys production. The `.github/workflows/pr-preview.yml` workflow still
+builds Docker images for ephemeral per-PR preview containers via launchpad; the
+`Dockerfile`/`docker-compose.yml` support those previews and local containerized
+runs. `docker-compose.inferno.yml` is the separate Inferno test harness.
 
 ### API Endpoints
 | Method | Path | Description |
