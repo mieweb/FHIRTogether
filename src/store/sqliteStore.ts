@@ -848,18 +848,6 @@ export class SqliteStore implements FhirStore {
     return { ...slot, id, meta: { lastUpdated: now } };
   }
 
-  /**
-   * Un-shift a date by the offset so it matches raw DB values.
-   * shiftDate adds offsetDays on read; this subtracts them for queries.
-   */
-  private unshiftDate(isoDate: string): string {
-    const offsetDays = this.getDateOffsetDays();
-    if (offsetDays === 0) return isoDate;
-    const date = new Date(isoDate);
-    date.setDate(date.getDate() - offsetDays);
-    return date.toISOString();
-  }
-
   async getSlots(query: FhirSlotQuery): Promise<Slot[]> {
     let sql = 'SELECT * FROM slots WHERE 1=1';
     const params: SqlParam[] = [];
@@ -877,12 +865,12 @@ export class SqliteStore implements FhirStore {
 
     if (query.start) {
       sql += ' AND start >= ?';
-      params.push(this.unshiftDate(query.start));
+      params.push(query.start);
     }
 
     if (query.end) {
       sql += ' AND end <= ?';
-      params.push(this.unshiftDate(query.end));
+      params.push(query.end);
     }
 
     sql += ' ORDER BY start ASC';
