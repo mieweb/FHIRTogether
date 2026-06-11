@@ -31,8 +31,10 @@ jobs:
 
           RESPONSE=$(curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" \
             "$API_URL/sites/1/containers?hostname=$CONTAINER_NAME")
-          CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.containers[0].id // empty')
-          CONTAINER_STATUS=$(echo "$RESPONSE" | jq -r '.containers[0].status // empty')
+          # The launchpad API may return a non-JSON body (e.g. an HTML error
+          # page). Don't let a jq parse error abort the step under `bash -e`.
+          CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.containers[0].id // empty' 2>/dev/null || echo "")
+          CONTAINER_STATUS=$(echo "$RESPONSE" | jq -r '.containers[0].status // empty' 2>/dev/null || echo "")
 
           if [[ -n "$CONTAINER_ID" && "$CONTAINER_STATUS" == "failed" ]]; then
             echo "Deleting failed container $CONTAINER_NAME (ID: $CONTAINER_ID)..."
