@@ -48,6 +48,8 @@ export interface Schedule extends FhirResource {
   actor: Reference[];
   planningHorizon?: Period;
   comment?: string;
+  /** FHIR extensions (e.g. availableTime, slot length, sync source marker). */
+  extension?: Array<Record<string, unknown>>;
 }
 
 /**
@@ -299,6 +301,7 @@ export interface FhirStore {
   getSchedules(query: FhirScheduleQuery): Promise<Schedule[]>;
   getScheduleById(id: string): Promise<Schedule | null>;
   createSchedule(schedule: Schedule): Promise<Schedule>;
+  upsertSchedule(schedule: Schedule): Promise<Schedule>;
   updateSchedule(id: string, schedule: Partial<Schedule>): Promise<Schedule>;
   deleteSchedule(id: string): Promise<void>;
   deleteAllSchedules(): Promise<void>;

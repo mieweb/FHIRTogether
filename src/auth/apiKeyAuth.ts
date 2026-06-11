@@ -24,6 +24,8 @@ const PUBLIC_PATH_PREFIXES = [
   '/Directory',
   '/System/register',
   '/hl7-tester',
+  '/sync-proxy',
+  '/sync-schedules',
   '/mcp/',
   '/$bulk-publish',
 ];

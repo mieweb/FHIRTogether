@@ -12,7 +12,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { timingSafeEqual } from 'crypto';
 
 /** Paths that never require authentication. */
-const PUBLIC_PATH_PREFIXES = ['/health', '/docs', '/demo', '/scheduler/'];
+const PUBLIC_PATH_PREFIXES = ['/health', '/docs', '/demo', '/scheduler/', '/sync-proxy', '/sync-schedules'];
 const PUBLIC_EXACT_PATHS = new Set(['/', '/health', '/favicon.ico']);
 
 /**

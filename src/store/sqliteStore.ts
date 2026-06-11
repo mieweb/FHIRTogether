@@ -51,7 +51,7 @@ function toNaiveISO(date: Date): string {
  * The store will compare it against the version stored in the database
  * and report a mismatch so the server can warn or rebuild.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export interface SchemaStatus {
   current: number;
@@ -107,6 +107,7 @@ export class SqliteStore implements FhirStore {
         planning_horizon_start TEXT,
         planning_horizon_end TEXT,
         comment TEXT,
+        extension TEXT,
         meta_last_updated TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
@@ -265,6 +266,14 @@ export class SqliteStore implements FhirStore {
     const schedColsV5 = this.db.pragma('table_info(schedules)') as { name: string }[];
     if (!schedColsV5.some(c => c.name === 'availability_template')) {
       this.db.exec('ALTER TABLE schedules ADD COLUMN availability_template TEXT');
+    }
+
+    // Migration v5→v6: add extension column to schedules (stores the original
+    // FHIR extension array for synced schedules: availableTime, slot length,
+    // and the sync-source marker).
+    const schedColsV6 = this.db.pragma('table_info(schedules)') as { name: string }[];
+    if (!schedColsV6.some(c => c.name === 'extension')) {
+      this.db.exec('ALTER TABLE schedules ADD COLUMN extension TEXT');
     }
 
     // Stamp the schema version after all migrations succeed
@@ -619,9 +628,9 @@ export class SqliteStore implements FhirStore {
     const stmt = this.db.prepare(`
       INSERT INTO schedules (
         id, active, service_category, service_type, specialty, actor,
-        planning_horizon_start, planning_horizon_end, comment, meta_last_updated,
+        planning_horizon_start, planning_horizon_end, comment, extension, meta_last_updated,
         system_id, location_id, availability_template
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -634,6 +643,7 @@ export class SqliteStore implements FhirStore {
       schedule.planningHorizon?.start,
       schedule.planningHorizon?.end,
       schedule.comment,
+      schedule.extension ? JSON.stringify(schedule.extension) : null,
       now,
       schedule.system_id || null,
       schedule.location_id || null,
@@ -642,6 +652,56 @@ export class SqliteStore implements FhirStore {
 
     return { ...schedule, id, meta: { lastUpdated: now } };
   }
+
+  /**
+   * Insert a schedule, or replace it in place if a schedule with the same id
+   * already exists. Used by schedule synchronization so re-syncing an endpoint
+   * updates availability without deleting the row (which would cascade-delete
+   * its slots) and without touching appointments.
+   */
+  async upsertSchedule(schedule: Schedule & { system_id?: string; location_id?: string; availability_template?: string }): Promise<Schedule> {
+    const id = schedule.id || this.generateId();
+    const now = toNaiveISO(new Date());
+
+    const stmt = this.db.prepare(`
+      INSERT INTO schedules (
+        id, active, service_category, service_type, specialty, actor,
+        planning_horizon_start, planning_horizon_end, comment, extension, meta_last_updated,
+        system_id, location_id, availability_template
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        active = excluded.active,
+        service_category = excluded.service_category,
+        service_type = excluded.service_type,
+        specialty = excluded.specialty,
+        actor = excluded.actor,
+        planning_horizon_start = excluded.planning_horizon_start,
+        planning_horizon_end = excluded.planning_horizon_end,
+        comment = excluded.comment,
+        extension = excluded.extension,
+        meta_last_updated = excluded.meta_last_updated
+    `);
+
+    stmt.run(
+      id,
+      schedule.active ? 1 : 0,
+      JSON.stringify(schedule.serviceCategory || []),
+      JSON.stringify(schedule.serviceType || []),
+      JSON.stringify(schedule.specialty || []),
+      JSON.stringify(schedule.actor),
+      schedule.planningHorizon?.start,
+      schedule.planningHorizon?.end,
+      schedule.comment,
+      schedule.extension ? JSON.stringify(schedule.extension) : null,
+      now,
+      schedule.system_id || null,
+      schedule.location_id || null,
+      schedule.availability_template || null,
+    );
+
+    return { ...schedule, id, meta: { lastUpdated: now } };
+  }
+
 
   async getSchedules(query: FhirScheduleQuery & { system_id?: string }): Promise<Schedule[]> {
     let sql = 'SELECT s.*, sys.name AS system_name FROM schedules s LEFT JOIN systems sys ON s.system_id = sys.id WHERE 1=1';
@@ -1324,8 +1384,15 @@ export class SqliteStore implements FhirStore {
       meta: { lastUpdated: row.meta_last_updated },
     };
 
-    // Build FHIR extensions array
-    const extensions: { url: string; valueString?: string }[] = [];
+    // Build FHIR extensions array. Start with any extensions stored verbatim
+    // (synced schedules persist their availableTime / slot-length / source
+    // marker here), then append the synthesized system/availability extensions.
+    const extensions: Record<string, unknown>[] = [];
+
+    const stored = this.parseJson(row.extension);
+    if (Array.isArray(stored)) {
+      extensions.push(...stored);
+    }
 
     if (row.system_name) {
       extensions.push({
@@ -1342,7 +1409,7 @@ export class SqliteStore implements FhirStore {
     }
 
     if (extensions.length > 0) {
-      (schedule as Schedule & { extension?: unknown[] }).extension = extensions;
+      schedule.extension = extensions;
     }
 
     return schedule;

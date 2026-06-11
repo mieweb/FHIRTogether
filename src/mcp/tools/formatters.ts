@@ -4,8 +4,11 @@ import { Schedule, Slot, Appointment, CodeableConcept, Reference } from '../../t
  * Extract the system name from a Schedule's extension (added by sqliteStore).
  */
 export function getSystemName(schedule: Schedule): string | undefined {
-  const ext = (schedule as Schedule & { extension?: { url: string; valueString?: string }[] }).extension;
-  return ext?.find(e => e.url === 'https://fhirtogether.org/fhir/StructureDefinition/system-name')?.valueString;
+  const match = schedule.extension?.find(
+    (e) => e.url === 'https://fhirtogether.org/fhir/StructureDefinition/system-name'
+  );
+  const value = match?.valueString;
+  return typeof value === 'string' ? value : undefined;
 }
 
 /**

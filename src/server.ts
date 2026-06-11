@@ -17,6 +17,7 @@ import { locationRoutes } from './routes/locationRoutes';
 import { directoryRoutes } from './routes/directoryRoutes';
 import { smartSchedulingRoutes, getSmartSchedulingConfig } from './routes/smartSchedulingRoutes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
+import { parseScheduleBundle } from './scheduling/scheduleSync';
 // Basic auth is now handled internally by apiKeyAuth as a fallback
 import { registerApiKeyAuth } from './auth/apiKeyAuth';
 import { createMcpServer } from './mcp/mcpServer';
@@ -296,7 +297,148 @@ async function buildServer() {
     return reply.sendFile('hl7-tester.html', path.join(__dirname, '..', 'public'));
   });
 
-  // Graceful shutdown
+  // CORS-bypass proxy for the schedule synchronization feature.
+  // The browser cannot fetch arbitrary remote FHIR endpoints cross-origin, so
+  // the Provider View page routes its fetch through this server-side proxy.
+  fastify.get<{ Querystring: { url?: string } }>('/sync-proxy', async (request, reply) => {
+    const target = request.query.url;
+    if (!target) {
+      return reply.code(400).send({ error: 'Missing "url" query parameter.' });
+    }
+
+    let parsed: URL;
+    try {
+      parsed = new URL(target);
+    } catch {
+      return reply.code(400).send({ error: 'Invalid URL.' });
+    }
+
+    // Only allow outbound HTTP(S) requests.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return reply.code(400).send({ error: 'Only http and https URLs are supported.' });
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      const upstream = await fetch(parsed.toString(), {
+        method: 'GET',
+        headers: { Accept: 'application/fhir+json, application/json' },
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      const body = await upstream.text();
+      return reply
+        .code(upstream.status)
+        .header('Content-Type', upstream.headers.get('content-type') || 'application/json')
+        .send(body);
+    } catch (err) {
+      // Node's fetch throws a generic "fetch failed"; the real reason (DNS,
+      // TLS, connection refused, timeout) lives on err.cause. Surface it so the
+      // operator can tell what is actually blocking the outbound request.
+      let message = err instanceof Error ? err.message : 'Upstream request failed.';
+      const cause = (err as { cause?: unknown })?.cause;
+      if (cause instanceof Error) {
+        const code = (cause as { code?: string }).code;
+        message += ` (${code ? code + ': ' : ''}${cause.message})`;
+      }
+      request.log.error({ err, target: parsed.toString() }, 'sync-proxy upstream fetch failed');
+      return reply.code(502).send({ error: `Upstream fetch failed: ${message}` });
+    }
+  });
+
+  // Schedule synchronization: fetch a remote FHIR collection Bundle, parse its
+  // Schedule/Practitioner/Location resources, and upsert the schedules into the
+  // local store so they become real resources that survive a page reload.
+  fastify.post<{ Body: { url?: string } }>(
+    '/sync-schedules',
+    {
+      schema: {
+        description: 'Synchronize provider schedules from a remote FHIR collection Bundle endpoint.',
+        tags: ['Schedule'],
+        body: {
+          type: 'object',
+          required: ['url'],
+          additionalProperties: true,
+          properties: { url: { type: 'string', description: 'Remote FHIR endpoint returning a collection Bundle.' } },
+        },
+        response: {
+          200: {
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              success: { type: 'boolean' },
+              imported: { type: 'number' },
+              source: { type: 'string' },
+            },
+          },
+          400: { type: 'object', additionalProperties: true, properties: { error: { type: 'string' } } },
+          502: { type: 'object', additionalProperties: true, properties: { error: { type: 'string' } } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const target = request.body?.url;
+      if (!target) {
+        return reply.code(400).send({ error: 'Missing "url" in request body.' });
+      }
+
+      let parsed: URL;
+      try {
+        parsed = new URL(target);
+      } catch {
+        return reply.code(400).send({ error: 'Invalid URL.' });
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return reply.code(400).send({ error: 'Only http and https URLs are supported.' });
+      }
+
+      // ── Fetch the remote Bundle ──
+      let bundle: unknown;
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        const upstream = await fetch(parsed.toString(), {
+          method: 'GET',
+          headers: { Accept: 'application/fhir+json, application/json' },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (!upstream.ok) {
+          return reply
+            .code(502)
+            .send({ error: `Upstream responded with HTTP ${upstream.status} ${upstream.statusText}.` });
+        }
+        bundle = await upstream.json();
+      } catch (err) {
+        let message = err instanceof Error ? err.message : 'Upstream request failed.';
+        const cause = (err as { cause?: unknown })?.cause;
+        if (cause instanceof Error) {
+          const code = (cause as { code?: string }).code;
+          message += ` (${code ? code + ': ' : ''}${cause.message})`;
+        }
+        request.log.error({ err, target: parsed.toString() }, 'sync-schedules upstream fetch failed');
+        return reply.code(502).send({ error: `Upstream fetch failed: ${message}` });
+      }
+
+      // ── Parse + persist ──
+      try {
+        const { schedules } = parseScheduleBundle(bundle, parsed.toString());
+        for (const schedule of schedules) {
+          await store.upsertSchedule(schedule);
+        }
+        request.log.info({ imported: schedules.length, source: parsed.toString() }, 'Schedules synchronized');
+        return reply.send({ success: true, imported: schedules.length, source: parsed.toString() });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to parse schedule bundle.';
+        return reply.code(400).send({ error: message });
+      }
+    }
+  );
+
+
   const closeGracefully = async (signal: string) => {
     fastify.log.info(`Received signal ${signal}, closing gracefully...`);
     await store.close();
@@ -347,7 +489,7 @@ async function start() {
     await runEvaporation();
     const evaporationInterval = setInterval(runEvaporation, EVAPORATION_CHECK_INTERVAL_HOURS * 60 * 60 * 1000);
     evaporationInterval.unref();
-    
+
     // Start MLLP socket server if enabled
     let mllpServer: MLLPServer | null = null;
     if (HL7_SOCKET_ENABLED) {
@@ -362,11 +504,11 @@ async function start() {
         } : undefined,
         allowedIPs: HL7_MLLP_ALLOWED_IPS.length > 0 ? HL7_MLLP_ALLOWED_IPS : undefined,
       });
-      
+
       mllpServer.on('listening', (info) => {
         console.log(`📨 HL7 MLLP Socket: ${info.tls ? 'tls' : 'tcp'}://${info.host}:${info.port}`);
       });
-      
+
       mllpServer.on('error', (err) => {
         console.error('MLLP Server error:', err);
       });
@@ -374,18 +516,18 @@ async function start() {
       mllpServer.on('rejected', (info) => {
         fastify.log.warn(info, 'MLLP connection rejected');
       });
-      
+
       mllpServer.on('message', (event) => {
         fastify.log.info({ messageType: event.parsed.messageType, controlId: event.parsed.controlId }, 'HL7 message received via socket');
       });
-      
+
       mllpServer.on('processed', (info) => {
         fastify.log.info(info, 'HL7 message processed');
       });
-      
+
       await mllpServer.start();
     }
-    
+
     console.log('\n🚀 FHIRTogether Scheduling Synapse');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`📡 Server running at: http://${HOST}:${PORT}`);
@@ -413,11 +555,11 @@ async function start() {
       }
       console.log('└──────────────────────────────────────────┘\n');
     }
-    
+
     // Update graceful shutdown to include MLLP server
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
-    
+
     const closeAll = async (signal: string) => {
       fastify.log.info(`Received signal ${signal}, closing gracefully...`);
       if (mllpServer) {
@@ -427,10 +569,10 @@ async function start() {
       await fastify.close();
       process.exit(0);
     };
-    
+
     process.on('SIGINT', () => closeAll('SIGINT'));
     process.on('SIGTERM', () => closeAll('SIGTERM'));
-    
+
   } catch (err) {
     console.error('Error starting server:', err);
     process.exit(1);

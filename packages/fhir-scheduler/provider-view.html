@@ -57,6 +57,118 @@
       font-weight: 600;
       font-family: system-ui, -apple-system, sans-serif;
     }
+
+    /* ── Schedule synchronization panel ── */
+    .sync-panel {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .sync-panel h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.35rem; color: #111827; }
+    .sync-panel-desc { font-size: 0.85rem; color: #6b7280; margin: 0 0 0.9rem; }
+    .sync-controls { display: flex; gap: 0.6rem; align-items: flex-end; flex-wrap: wrap; }
+    .sync-url-field { flex: 1 1 420px; min-width: 280px; }
+    .sync-url-field label {
+      display: block; font-size: 0.78rem; font-weight: 600;
+      color: #6b7280; margin-bottom: 0.2rem;
+    }
+    .sync-url-field input {
+      width: 100%; padding: 0.55rem 0.7rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem;
+      border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #111827;
+    }
+    .sync-url-field input:focus { outline: 2px solid #2563eb; outline-offset: -1px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.55rem 1rem; font-size: 0.85rem; font-weight: 600;
+      border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+      transition: background 0.15s; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-secondary { background: #f3f4f6; color: #111827; border-color: #d1d5db; }
+    .btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
+
+    .grid-wrapper {
+      background: #fff; border: 1px solid #e5e7eb;
+      border-radius: 12px; overflow: hidden; margin-bottom: 1.5rem;
+    }
+    .grid-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb;
+    }
+    .grid-toolbar h2 { font-size: 0.95rem; font-weight: 600; margin: 0; color: #111827; }
+    .grid-count { font-size: 0.8rem; font-weight: 600; color: #6b7280; }
+    .grid-scroll { overflow-x: auto; }
+
+    table.schedule-grid { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    table.schedule-grid th, table.schedule-grid td {
+      padding: 0.55rem 0.7rem; text-align: left; vertical-align: top;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    table.schedule-grid thead th {
+      position: sticky; top: 0; background: #f9fafb; font-weight: 700;
+      font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.03em;
+      color: #6b7280; white-space: nowrap;
+    }
+    table.schedule-grid tbody tr:hover { background: #f9fafb; }
+    .cell-provider { font-weight: 600; }
+    .cell-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+    .cell-comment { color: #6b7280; font-style: italic; }
+
+    .dow-group { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+    .dow-chip {
+      display: inline-flex; align-items: center; gap: 0.2rem;
+      font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.3rem;
+      border-radius: 6px; border: 1px solid #d1d5db; color: #6b7280;
+    }
+    .dow-chip input { margin: 0; accent-color: #2563eb; }
+    .dow-chip.dow-active { background: #dbeafe; border-color: #2563eb; color: #1e40af; }
+
+    .type-tags { display: flex; gap: 0.25rem; flex-wrap: wrap; max-width: 320px; }
+    .type-tag {
+      font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.45rem;
+      border-radius: 999px; background: #f3f4f6; border: 1px solid #e5e7eb; color: #111827;
+    }
+    .type-empty { color: #9ca3af; font-size: 0.78rem; }
+    .grid-empty { padding: 2.5rem 1rem; text-align: center; color: #6b7280; font-size: 0.9rem; }
+
+    /* ── Loading overlay ── */
+    .loading-overlay {
+      position: fixed; inset: 0; z-index: 9000; display: none;
+      align-items: center; justify-content: center; flex-direction: column; gap: 1rem;
+      background: rgba(15, 23, 42, 0.55); color: white;
+    }
+    .loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 52px; height: 52px; border: 5px solid rgba(255, 255, 255, 0.3);
+      border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 0.95rem; font-weight: 600; }
+
+    /* ── Toasts ── */
+    .toast-stack {
+      position: fixed; bottom: 1.25rem; right: 1.25rem; z-index: 9500;
+      display: flex; flex-direction: column; gap: 0.6rem;
+      max-width: min(380px, calc(100vw - 2rem));
+    }
+    .toast {
+      display: flex; align-items: flex-start; gap: 0.6rem;
+      padding: 0.8rem 1rem; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      font-size: 0.86rem; font-weight: 600; color: white;
+      opacity: 0; transform: translateY(10px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .toast.visible { opacity: 1; transform: translateY(0); }
+    .toast-success { background: #16a34a; }
+    .toast-error   { background: #dc2626; }
+    .toast-info    { background: #2563eb; }
+    .toast-icon { font-size: 1.05rem; line-height: 1.2; }
   </style>
 </head>
 <body>
@@ -76,6 +188,386 @@
 
   <div id="app"></div>
 
+  <!-- ── Schedule synchronization (shown via the "Synchronize" tab in the React app) ── -->
+  <div id="sync-section" hidden>
+    <section class="sync-panel" aria-label="Synchronization controls">
+      <h2>Synchronize Schedules</h2>
+      <p class="sync-panel-desc">
+        Pull provider availability from any FHIR R4 endpoint that returns a
+        <code>Bundle</code> of type <code>collection</code> (Schedule, Practitioner,
+        and Location resources). Click <strong>Synchronize</strong> to import availability.
+      </p>
+      <div class="sync-controls">
+        <div class="sync-url-field">
+          <label for="sync-url">Source URL</label>
+          <input
+            type="url"
+            id="sync-url"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="https://zeus.med-web.com/webchart/wctmpierzchala/webchart.cgi/rest/schedules"
+            value="https://zeus.med-web.com/webchart/wctmpierzchala/webchart.cgi/rest/schedules"
+            aria-label="FHIR endpoint URL to synchronize schedules from">
+        </div>
+        <button class="btn btn-primary" id="sync-btn" type="button"
+                onclick="handleSynchronizeClick()"
+                aria-label="Synchronize schedules from the entered URL">
+          🔄 Synchronize
+        </button>
+        <button class="btn btn-secondary" id="clear-btn" type="button"
+                onclick="clearGrid()"
+                aria-label="Clear synchronized schedules">
+          Clear
+        </button>
+      </div>
+    </section>
+
+    <section class="grid-wrapper" aria-label="Synchronized schedules">
+      <div class="grid-toolbar">
+        <h2>Synchronized Schedules</h2>
+        <span class="grid-count" id="grid-count" aria-live="polite">0 schedules</span>
+      </div>
+      <div class="grid-scroll">
+        <table class="schedule-grid">
+          <thead>
+            <tr>
+              <th scope="col">Resource (Provider)</th>
+              <th scope="col">Location</th>
+              <th scope="col">Start</th>
+              <th scope="col">End</th>
+              <th scope="col">Days of Week</th>
+              <th scope="col">Start Time</th>
+              <th scope="col">End Time</th>
+              <th scope="col">Slot (min)</th>
+              <th scope="col">Types</th>
+              <th scope="col">Comments</th>
+            </tr>
+          </thead>
+          <tbody id="grid-body">
+            <tr>
+              <td colspan="10" class="grid-empty">
+                No schedules yet. Enter a FHIR endpoint above and click <strong>Synchronize</strong>.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Loading overlay ── -->
+  <div class="loading-overlay" id="loading-overlay" role="status" aria-live="polite" aria-hidden="true">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="loading-text">Synchronizing schedules…</div>
+  </div>
+
+  <!-- ── Toast stack ── -->
+  <div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
   <script type="module" src="./dist/provider-view.js"></script>
+  <script>
+// ────────────────────────────────────────────────────────────
+// Schedule synchronization (vanilla, independent of the React bundle)
+// ────────────────────────────────────────────────────────────
+const DEFAULT_ENDPOINT = 'https://zeus.med-web.com/webchart/wctmpierzchala/webchart.cgi/rest/schedules';
+
+/** Ordered weekday tokens as used by FHIR Schedule.availableTime.daysOfWeek */
+const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const WEEKDAY_LABELS = { sun: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat' };
+
+/** In-memory grid state — the mapped local schedule rows */
+let scheduleRows = [];
+
+// ── UI helpers: loading overlay + toasts ──
+function showLoading(show) {
+  const overlay = document.getElementById('loading-overlay');
+  overlay.classList.toggle('visible', show);
+  overlay.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function showToast(message, type = 'info') {
+  const stack = document.getElementById('toast-stack');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+  const icon = type === 'success' ? '✅' : type === 'error' ? '⚠️' : 'ℹ️';
+  toast.innerHTML = `<span class="toast-icon" aria-hidden="true">${icon}</span><span>${escapeHtml(message)}</span>`;
+  stack.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+  setTimeout(() => {
+    toast.classList.remove('visible');
+    setTimeout(() => toast.remove(), 250);
+  }, 5000);
+}
+
+/** Minimal HTML escaping to prevent markup injection from remote data */
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Parsing helpers ──
+
+/** Format an ISO timestamp into "MM-DD-YYYY HH:MM:SS" (UTC). Returns '' if missing/invalid. */
+function formatDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const pad = (n) => String(n).padStart(2, '0');
+  const mm = pad(d.getUTCMonth() + 1);
+  const dd = pad(d.getUTCDate());
+  const yyyy = d.getUTCFullYear();
+  const hh = pad(d.getUTCHours());
+  const min = pad(d.getUTCMinutes());
+  const ss = pad(d.getUTCSeconds());
+  return `${mm}-${dd}-${yyyy} ${hh}:${min}:${ss}`;
+}
+
+/** Normalize an HH:MM:SS time string to HH:MM. */
+function formatTime(time) {
+  if (!time) return '';
+  const m = /^(\d{2}):(\d{2})/.exec(time);
+  return m ? `${m[1]}:${m[2]}` : time;
+}
+
+/** Build a display name from a Practitioner.name entry: "Family, Given1 Given2". */
+function practitionerName(resource) {
+  const name = resource?.name?.[0];
+  if (!name) return resource?.id ? `Practitioner/${resource.id}` : 'Unknown';
+  const given = Array.isArray(name.given) ? name.given.filter(Boolean).join(' ').trim() : '';
+  const family = (name.family || '').trim();
+  if (family && given) return `${family}, ${given}`;
+  return family || given || (resource.id ? `Practitioner/${resource.id}` : 'Unknown');
+}
+
+/** Find the first actor reference that points at the given resource type prefix. */
+function findActor(actors, typePrefix) {
+  if (!Array.isArray(actors)) return undefined;
+  return actors.find((a) => typeof a?.reference === 'string' && a.reference.startsWith(typePrefix + '/'));
+}
+
+/** Extract the trailing id from a "Type/id" reference. */
+function refId(reference) {
+  return typeof reference === 'string' ? reference.split('/').pop() : undefined;
+}
+
+/**
+ * Map a single FHIR Schedule resource into a local grid row, using the
+ * Practitioner/Location lookup maps for cross-referencing.
+ */
+function mapSchedule(schedule, practitioners, locations) {
+  // ── Resource (Provider) ──
+  const practitionerActor = findActor(schedule.actor, 'Practitioner');
+  const practitionerId = refId(practitionerActor?.reference);
+  const provider =
+    practitionerActor?.display
+    || (practitionerId && practitioners[practitionerId])
+    || (practitionerId ? `Practitioner/${practitionerId}` : '—');
+
+  // ── Location ──
+  const locationActor = findActor(schedule.actor, 'Location');
+  const locationId = refId(locationActor?.reference);
+  const location =
+    (locationId && locations[locationId])
+    || locationActor?.display
+    || (locationId ? `Location/${locationId}` : '—');
+
+  // ── Planning horizon (Start / End) ──
+  const start = formatDateTime(schedule.planningHorizon?.start);
+  const end = formatDateTime(schedule.planningHorizon?.end);
+
+  // ── Comments ──
+  const comment = schedule.comment || '';
+
+  // ── availableTime extension (days + start/end times) ──
+  const extensions = Array.isArray(schedule.extension) ? schedule.extension : [];
+  const availabilityExt = extensions.find(
+    (e) => e?.url === 'http://hl7.org/fhir/StructureDefinition/availableTime'
+  );
+  const availableTime = availabilityExt?.availableTime?.[0] || {};
+  const daysOfWeek = Array.isArray(availableTime.daysOfWeek) ? availableTime.daysOfWeek : [];
+  const startTime = formatTime(availableTime.availableStartTime);
+  const endTime = formatTime(availableTime.availableEndTime);
+
+  // ── Time slot length (extension url ends with /schedule-portal-time-slots) ──
+  const slotExt = extensions.find(
+    (e) => typeof e?.url === 'string' && e.url.endsWith('/schedule-portal-time-slots')
+  );
+  const slotMinutes = typeof slotExt?.valueInteger === 'number' ? slotExt.valueInteger : null;
+
+  // ── Service / appointment types ──
+  const serviceType = Array.isArray(schedule.serviceType) ? schedule.serviceType : [];
+  const types = serviceType
+    .map((st) => st?.text || st?.coding?.[0]?.display)
+    .filter(Boolean);
+
+  return { id: schedule.id, provider, location, start, end, daysOfWeek, startTime, endTime, slotMinutes, types, comment };
+}
+
+// ── Core synchronization logic ──
+
+/** Marker extension url stamped on schedules imported via synchronization. */
+const SYNC_SOURCE_EXTENSION_URL =
+  'https://fhirtogether.org/fhir/StructureDefinition/synced-from';
+
+/**
+ * Trigger a server-side synchronization: the server fetches the remote FHIR
+ * collection Bundle, parses it, and upserts the schedules into the local store.
+ * @param {string} apiUrl - FHIR REST endpoint returning a Bundle of type "collection".
+ * @returns {Promise<number>} number of schedules imported.
+ */
+async function synchronizeSchedules(apiUrl) {
+  let response;
+  try {
+    response = await fetch('/sync-schedules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ url: apiUrl }),
+    });
+  } catch (err) {
+    throw new Error('Network request failed. The server may be unreachable.');
+  }
+
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const errBody = await response.json();
+      if (errBody && errBody.error) detail = `: ${errBody.error}`;
+    } catch {
+      // Non-JSON error body — fall back to the status line.
+    }
+    throw new Error(`Synchronization failed: HTTP ${response.status} ${response.statusText}${detail}`);
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (err) {
+    throw new Error('Server response was not valid JSON.');
+  }
+
+  // Reload the grid from the persisted store so the result survives a reload.
+  await loadPersistedSchedules();
+  return typeof result.imported === 'number' ? result.imported : scheduleRows.length;
+}
+
+/**
+ * Load previously-synchronized schedules from the local store and render them.
+ * Filters to schedules that carry the sync-source marker extension so the grid
+ * shows synchronized availability rather than every schedule in the system.
+ */
+async function loadPersistedSchedules() {
+  let bundle;
+  try {
+    const response = await fetch('/Schedule?active=true', {
+      headers: { Accept: 'application/fhir+json, application/json' },
+    });
+    if (!response.ok) return;
+    bundle = await response.json();
+  } catch {
+    return;
+  }
+
+  const entries = Array.isArray(bundle?.entry) ? bundle.entry : [];
+  const rows = [];
+  for (const entry of entries) {
+    const resource = entry?.resource;
+    if (resource?.resourceType !== 'Schedule') continue;
+    const isSynced = Array.isArray(resource.extension)
+      && resource.extension.some((e) => e?.url === SYNC_SOURCE_EXTENSION_URL);
+    if (!isSynced) continue;
+    rows.push(mapSchedule(resource, {}, {}));
+  }
+
+  scheduleRows = rows;
+  renderGrid();
+}
+
+// ── Rendering ──
+function renderGrid() {
+  const body = document.getElementById('grid-body');
+  const count = document.getElementById('grid-count');
+  count.textContent = `${scheduleRows.length} schedule${scheduleRows.length === 1 ? '' : 's'}`;
+
+  if (scheduleRows.length === 0) {
+    body.innerHTML =
+      '<tr><td colspan="10" class="grid-empty">No schedules yet. Enter a FHIR endpoint above and click <strong>Synchronize</strong>.</td></tr>';
+    return;
+  }
+
+  body.innerHTML = scheduleRows.map((row) => {
+    const dowHtml = WEEKDAYS.map((day) => {
+      const active = row.daysOfWeek.includes(day);
+      return `<label class="dow-chip ${active ? 'dow-active' : ''}">
+        <input type="checkbox" disabled ${active ? 'checked' : ''}
+          aria-label="${escapeHtml(WEEKDAY_LABELS[day])} ${active ? 'available' : 'unavailable'}">
+        ${escapeHtml(WEEKDAY_LABELS[day])}
+      </label>`;
+    }).join('');
+
+    const typesHtml = row.types.length
+      ? `<div class="type-tags">${row.types.map((t) => `<span class="type-tag">${escapeHtml(t)}</span>`).join('')}</div>`
+      : '<span class="type-empty">—</span>';
+
+    return `<tr>
+      <td class="cell-provider">${escapeHtml(row.provider)}</td>
+      <td>${escapeHtml(row.location)}</td>
+      <td class="cell-mono">${escapeHtml(row.start) || '—'}</td>
+      <td class="cell-mono">${escapeHtml(row.end) || '—'}</td>
+      <td><div class="dow-group">${dowHtml}</div></td>
+      <td class="cell-mono">${escapeHtml(row.startTime) || '—'}</td>
+      <td class="cell-mono">${escapeHtml(row.endTime) || '—'}</td>
+      <td class="cell-mono">${row.slotMinutes != null ? row.slotMinutes : '—'}</td>
+      <td>${typesHtml}</td>
+      <td class="cell-comment">${escapeHtml(row.comment)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function clearGrid() {
+  scheduleRows = [];
+  renderGrid();
+  showToast('Cleared synchronized schedules.', 'info');
+}
+
+// ── Button handler ──
+async function handleSynchronizeClick() {
+  const input = document.getElementById('sync-url');
+  const btn = document.getElementById('sync-btn');
+  const apiUrl = (input.value || '').trim() || DEFAULT_ENDPOINT;
+
+  try {
+    new URL(apiUrl);
+  } catch {
+    showToast('Please enter a valid URL.', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  showLoading(true);
+  try {
+    const total = await synchronizeSchedules(apiUrl);
+    showToast(`Successfully synchronized ${total} schedule${total === 1 ? '' : 's'}.`, 'success');
+  } catch (err) {
+    console.error('Synchronization failed:', err);
+    showToast(err && err.message ? err.message : 'Synchronization failed.', 'error');
+  } finally {
+    showLoading(false);
+    btn.disabled = false;
+  }
+}
+
+// Expose handlers for inline onclick attributes
+window.handleSynchronizeClick = handleSynchronizeClick;
+window.clearGrid = clearGrid;
+
+// Restore any previously synchronized schedules so reopening the page shows
+// the last synchronization result instead of an empty grid.
+loadPersistedSchedules();
+  </script>
 </body>
 </html>

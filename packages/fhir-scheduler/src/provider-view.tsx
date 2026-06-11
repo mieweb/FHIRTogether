@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppointmentList } from './components/AppointmentList';
 import { ImportData } from './components/ImportData';
@@ -15,11 +15,20 @@ const urlParams = new URLSearchParams(window.location.search);
 const initialScheduleId = urlParams.get('schedule') || undefined;
 const initialDate = urlParams.get('date') || undefined;
 
-type TabType = 'appointments' | 'schedule-setup' | 'import';
+type TabType = 'appointments' | 'schedule-setup' | 'import' | 'synchronize';
 
 function ProviderView() {
   const [activeTab, setActiveTab] = useState<TabType>('appointments');
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // The schedule-synchronization UI lives in static HTML outside the React
+  // root (#sync-section). Show it only when the "Synchronize" tab is active.
+  useEffect(() => {
+    const section = document.getElementById('sync-section');
+    if (section) {
+      section.hidden = activeTab !== 'synchronize';
+    }
+  }, [activeTab]);
 
   const handleImportComplete = useCallback(() => {
     // Refresh appointments list when import completes
@@ -60,6 +69,16 @@ function ProviderView() {
           onClick={() => setActiveTab('import')}
         >
           Import Data
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'synchronize'}
+          aria-controls="sync-section"
+          className={`fs-demo-tab ${activeTab === 'synchronize' ? 'fs-demo-tab-active' : ''}`}
+          onClick={() => setActiveTab('synchronize')}
+        >
+          Synchronize
         </button>
       </nav>
 
