@@ -17,7 +17,8 @@ import { locationRoutes } from './routes/locationRoutes';
 import { directoryRoutes } from './routes/directoryRoutes';
 import { smartSchedulingRoutes, getSmartSchedulingConfig } from './routes/smartSchedulingRoutes';
 import { createMLLPServer, MLLPServer } from './hl7/socket';
-import { parseScheduleBundle } from './scheduling/scheduleSync';
+import { parseScheduleBundle, buildSlotTemplate } from './scheduling/scheduleSync';
+import { expandSlots } from './scheduling/slotExpander';
 // Basic auth is now handled internally by apiKeyAuth as a fallback
 import { registerApiKeyAuth } from './auth/apiKeyAuth';
 import { createMcpServer } from './mcp/mcpServer';
@@ -370,6 +371,8 @@ async function buildServer() {
             properties: {
               success: { type: 'boolean' },
               imported: { type: 'number' },
+              slotsGenerated: { type: 'number' },
+              notes: { type: 'array', items: { type: 'string' } },
               source: { type: 'string' },
             },
           },
@@ -426,11 +429,50 @@ async function buildServer() {
       // ── Parse + persist ──
       try {
         const { schedules } = parseScheduleBundle(bundle, parsed.toString());
+        let slotsGenerated = 0;
+        const notes: string[] = [];
+
         for (const schedule of schedules) {
           await store.upsertSchedule(schedule);
+          if (!schedule.id) continue;
+
+          const label =
+            schedule.actor?.find((a) => a.display)?.display || `Schedule/${schedule.id}`;
+          const { template, note } = buildSlotTemplate(schedule);
+
+          // Replace mode: clear previously-synced free slots before regenerating.
+          await store.deleteSlotsBySchedule(schedule.id, 'free');
+
+          if (!template) {
+            if (note) notes.push(`${label}: ${note}`);
+            continue;
+          }
+
+          const { slots, warnings } = expandSlots(template, `Schedule/${schedule.id}`);
+          // Tag each generated slot with the schedule's appointment types.
+          if (Array.isArray(schedule.serviceType) && schedule.serviceType.length > 0) {
+            for (const slot of slots) slot.serviceType = schedule.serviceType;
+          }
+          if (slots.length > 0) {
+            const { count } = await store.createSlots(slots);
+            slotsGenerated += count;
+          } else {
+            notes.push(`${label}: no slots in date range`);
+          }
+          for (const w of warnings) notes.push(`${label}: ${w}`);
         }
-        request.log.info({ imported: schedules.length, source: parsed.toString() }, 'Schedules synchronized');
-        return reply.send({ success: true, imported: schedules.length, source: parsed.toString() });
+
+        request.log.info(
+          { imported: schedules.length, slotsGenerated, source: parsed.toString() },
+          'Schedules synchronized',
+        );
+        return reply.send({
+          success: true,
+          imported: schedules.length,
+          slotsGenerated,
+          notes,
+          source: parsed.toString(),
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to parse schedule bundle.';
         return reply.code(400).send({ error: message });

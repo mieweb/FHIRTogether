@@ -1,6 +1,7 @@
 import {
   parseScheduleBundle,
   isSyncedSchedule,
+  buildSlotTemplate,
   SYNC_SOURCE_EXTENSION_URL,
 } from '../scheduling/scheduleSync';
 
@@ -103,5 +104,55 @@ describe('parseScheduleBundle', () => {
     expect(() =>
       parseScheduleBundle({ resourceType: 'Bundle', type: 'searchset', entry: [] }, SOURCE_URL)
     ).toThrow(/collection/);
+  });
+});
+
+describe('buildSlotTemplate', () => {
+  const [schedule] = parseScheduleBundle(COLLECTION_BUNDLE, SOURCE_URL).schedules;
+
+  it('converts availableTime + slot-length into a forward-projected template', () => {
+    const { template } = buildSlotTemplate(schedule, '2026-02-01');
+    expect(template).not.toBeNull();
+    expect(template!.weekdays).toEqual(['mon', 'tue']);
+    expect(template!.blocks).toEqual([{ start: '08:00', end: '17:00', duration: 15 }]);
+    // Starts at today (after the horizon start), ends at the horizon end.
+    expect(template!.startDate).toBe('2026-02-01');
+    expect(template!.endDate).toBe('2026-08-30');
+  });
+
+  it('starts at the horizon start when it is still in the future', () => {
+    const { template } = buildSlotTemplate(schedule, '2025-01-01');
+    expect(template!.startDate).toBe('2026-01-30');
+  });
+
+  it('produces no template when the planning horizon has already ended', () => {
+    const { template, note } = buildSlotTemplate(schedule, '2027-01-01');
+    expect(template).toBeNull();
+    expect(note).toMatch(/in the past/);
+  });
+
+  it('defaults to weekdays when daysOfWeek is empty', () => {
+    const noDays = {
+      ...schedule,
+      extension: (schedule.extension || []).map((e) =>
+        e.url === 'http://hl7.org/fhir/StructureDefinition/availableTime'
+          ? { ...e, availableTime: [{ availableStartTime: '08:00:00', availableEndTime: '17:00:00', daysOfWeek: [] }] }
+          : e
+      ),
+    };
+    const { template } = buildSlotTemplate(noDays, '2026-02-01');
+    expect(template!.weekdays).toEqual(['mon', 'tue', 'wed', 'thu', 'fri']);
+  });
+
+  it('returns no template when availableTime is missing', () => {
+    const noAvail = {
+      ...schedule,
+      extension: (schedule.extension || []).filter(
+        (e) => e.url !== 'http://hl7.org/fhir/StructureDefinition/availableTime'
+      ),
+    };
+    const { template, note } = buildSlotTemplate(noAvail, '2026-02-01');
+    expect(template).toBeNull();
+    expect(note).toMatch(/availableTime/);
   });
 });
