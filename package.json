@@ -8,6 +8,10 @@
     "build": "tsc && npm run build --prefix packages/fhir-scheduler",
     "build:server": "tsc",
     "start": "node dist/server.js",
+    "deploy:worker": "wrangler deploy",
+    "dev:worker": "wrangler dev",
+    "d1:migrate:local": "wrangler d1 migrations apply fhirtogether --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply fhirtogether --remote",
     "generate-data": "tsx src/examples/generateBusyOffice.ts",
     "import-seed": "tsx src/examples/importSeedData.ts",
     "hl7-test": "tsx src/examples/testHL7.ts",
@@ -40,12 +44,14 @@
     "better-sqlite3": "^9.2.2",
     "dotenv": "^16.3.1",
     "fastify": "^5.8.5",
+    "hono": "^4.12.18",
     "pino": "^8.17.2",
     "pino-pretty": "^10.3.1",
     "rrule": "^2.8.1",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
     "@eslint/js": "^9.27.0",
     "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.8",
@@ -57,6 +63,7 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.32.1"
+    "typescript-eslint": "^8.32.1",
+    "wrangler": "^3.114.17"
   }
 }

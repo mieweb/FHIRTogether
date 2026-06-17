@@ -6,7 +6,10 @@ import fastifyStatic from '@fastify/static';
 import { config } from 'dotenv';
 import path from 'path';
 import fs from 'fs';
-import { SqliteStore, SCHEMA_VERSION } from './store/sqliteStore';
+import { SCHEMA_VERSION } from './store/sqliteStore';
+import { createStore } from './store';
+import { loadConfig } from './config';
+import { getDateOffsetDays } from './examples/seedMetadata';
 import { slotRoutes } from './routes/slotRoutes';
 import { scheduleRoutes } from './routes/scheduleRoutes';
 import { appointmentRoutes } from './routes/appointmentRoutes';
@@ -24,9 +27,11 @@ import { createMcpServer } from './mcp/mcpServer';
 // Load environment variables
 config();
 
-const PORT = parseInt(process.env.PORT || '4010', 10);
-const HOST = process.env.HOST || '0.0.0.0';
-const STORE_BACKEND = process.env.STORE_BACKEND || 'sqlite';
+const appConfig = loadConfig(process.env as Record<string, string | undefined>);
+
+const PORT = appConfig.port;
+const HOST = appConfig.host;
+const STORE_BACKEND = appConfig.storeBackend;
 const HL7_SOCKET_PORT = parseInt(process.env.HL7_SOCKET_PORT || '2575', 10);
 const HL7_SOCKET_ENABLED = process.env.HL7_SOCKET_ENABLED !== 'false';
 const HL7_TLS_ENABLED = process.env.HL7_TLS_ENABLED === 'true';
@@ -37,8 +42,8 @@ const AUTH_ENABLED = !!(process.env.AUTH_USERNAME && process.env.AUTH_PASSWORD);
 const HL7_MLLP_ALLOWED_IPS = process.env.HL7_MLLP_ALLOWED_IPS
   ? process.env.HL7_MLLP_ALLOWED_IPS.split(',').map(ip => ip.trim()).filter(Boolean)
   : [];
-const HL7_MESSAGE_LOG_RETENTION_DAYS = parseInt(process.env.HL7_MESSAGE_LOG_RETENTION_DAYS || '7', 10);
-const EVAPORATION_CHECK_INTERVAL_HOURS = parseInt(process.env.EVAPORATION_CHECK_INTERVAL_HOURS || '1', 10);
+const HL7_MESSAGE_LOG_RETENTION_DAYS = appConfig.hl7MessageLogRetentionDays;
+const EVAPORATION_CHECK_INTERVAL_HOURS = appConfig.evaporationCheckIntervalHours;
 const MCP_DISABLED = process.env.DISABLE_MCP === 'true';
 
 /** Recursively find the newest mtime in a directory tree. */
@@ -152,28 +157,32 @@ async function buildServer() {
     return reply.redirect('/scheduler/index.html');
   });
 
-  // Initialize store
-  let store;
+  // Initialize store via the backend-agnostic factory.
+  // To add a new backend (D1, Mongo, Postgres, …), implement `FhirStore`
+  // and wire it up in `src/store/index.ts`.
+  // The `dateOffsetProvider` keeps demo-data timestamps current relative to
+  // today — it's a Node-only concern (reads seed-metadata.json from disk)
+  // and is harmless when no seed metadata is present (returns 0).
+  const seedDataDir = path.dirname(appConfig.sqliteDbPath);
+  const store = await createStore(STORE_BACKEND, {
+    sqliteDbPath: appConfig.sqliteDbPath,
+    dateOffsetProvider: () => getDateOffsetDays(seedDataDir),
+  });
   const startupWarnings: string[] = [];
 
-  if (STORE_BACKEND === 'sqlite') {
-    store = new SqliteStore();
-    const schemaStatus = await store.initialize();
+  const schemaStatus = await store.initialize();
 
-    if (!schemaStatus.match) {
-      startupWarnings.push(
-        `⚠️  DB schema mismatch: database is v${schemaStatus.current}, code expects v${SCHEMA_VERSION}`,
-        `   Auto-migrated to v${SCHEMA_VERSION} — verify data with: npm run generate-data`,
-        `   Or reset the database:  rm data/fhirtogether.db && npm run generate-data`,
-      );
-    } else if (schemaStatus.migrated && schemaStatus.current === 0) {
-      fastify.log.info('Fresh database — schema created at v' + SCHEMA_VERSION);
-    }
-
-    fastify.log.info('SQLite store initialized (schema v' + SCHEMA_VERSION + ')');
-  } else {
-    throw new Error(`Unsupported store backend: ${STORE_BACKEND}`);
+  if (!schemaStatus.match) {
+    startupWarnings.push(
+      `⚠️  DB schema mismatch: database is v${schemaStatus.current}, code expects v${SCHEMA_VERSION}`,
+      `   Auto-migrated to v${SCHEMA_VERSION} — verify data with: npm run generate-data`,
+      `   Or reset the database:  rm data/fhirtogether.db && npm run generate-data`,
+    );
+  } else if (schemaStatus.migrated && schemaStatus.current === 0) {
+    fastify.log.info('Fresh database — schema created at v' + SCHEMA_VERSION);
   }
+
+  fastify.log.info(`${STORE_BACKEND} store initialized (schema v${SCHEMA_VERSION})`);
 
   // Register API key auth (with Basic Auth admin fallback)
   registerApiKeyAuth(fastify, store);

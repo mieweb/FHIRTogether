@@ -9,6 +9,8 @@
  */
 
 import { SqliteStore } from '../store/sqliteStore';
+import { setGenerationDate } from './seedMetadata';
+import * as path from 'path';
 import { Schedule, Slot, Appointment } from '../types/fhir';
 
 interface Provider {
@@ -328,7 +330,7 @@ async function main() {
     // Store the generation date for dynamic date shifting
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    store.setGenerationDate(toNaiveISO(today));
+    setGenerationDate(path.dirname(dbPath), toNaiveISO(today));
     console.log(`📅 Generation date set to: ${toNaiveISO(today).split('T')[0]}`);
     console.log('   (Dates will auto-shift to stay relative to today)\n');
 

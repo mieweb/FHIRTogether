@@ -1,0 +1,56 @@
+# Cloudflare Workers config for the FHIRTogether REST gateway.
+#
+# This deploys the Workers entry point (`src/worker.ts`) against a D1
+# database. The Node deployment (`src/server.ts` + Fastify + MLLP) is
+# unaffected by this config and remains the primary deployment.
+#
+# Workers deployment scope: REST FHIR endpoints + HL7-over-HTTP + cron
+# jobs. The MLLP TCP listener, Swagger UI, static asset serving, and
+# MCP SSE transport all stay on the Node deployment — see
+# docs/CLOUDFLARE_WORKERS.md.
+#
+# To deploy:
+#   1. npx wrangler login
+#   2. npx wrangler d1 create fhirtogether
+#      → copy the printed `database_id` into the `[[d1_databases]]`
+#        block below (replace REPLACE_WITH_D1_DATABASE_ID).
+#   3. npx wrangler d1 migrations apply fhirtogether --remote
+#      → applies migrations/*.sql to the production D1 database.
+#   4. npx wrangler deploy
+#
+# Local dev:
+#   npx wrangler dev          # spins up Miniflare with a local D1
+#   npx wrangler d1 migrations apply fhirtogether --local
+name = "fhirtogether"
+main = "src/worker.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── D1 binding ──────────────────────────────────────────────────────
+# The Worker accesses this as `env.DB` in `src/worker.ts`.
+[[d1_databases]]
+binding = "DB"
+database_name = "fhirtogether"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# ── Environment variables ───────────────────────────────────────────
+# Non-secret config. Override per-environment with [env.<name>.vars].
+# Secrets (API_KEY, etc.) should be set via `wrangler secret put`.
+[vars]
+STORE_BACKEND = "d1"
+SYSTEM_TTL_DAYS = "7"
+HL7_MESSAGE_LOG_RETENTION_DAYS = "7"
+
+# ── Cron Triggers (Phase 4) ─────────────────────────────────────────
+# Replaces the `setInterval` background jobs from `src/server.ts`. The
+# `scheduled` handler in `worker.ts` runs ALL idempotent maintenance jobs
+# (expired-hold cleanup, system evaporation, HL7 log cleanup) on every
+# tick — the cron just controls frequency, not which jobs run. Hourly is
+# fine for all three; bump if expired-hold latency needs to be tighter.
+[triggers]
+crons = ["0 * * * *"]
+
+# ── Observability ───────────────────────────────────────────────────
+[observability]
+enabled = true

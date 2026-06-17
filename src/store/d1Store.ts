@@ -1,7 +1,3 @@
-import Database from 'better-sqlite3';
-import crypto from 'crypto';
-import path from 'path';
-import fs from 'fs';
 import {
   FhirStore,
   Schedule,
@@ -20,8 +16,24 @@ import {
   FhirScheduleQuery,
   FhirAppointmentQuery,
 } from '../types/fhir';
+import { sha256Hex, randomHex, timingSafeEqualHex } from '../util/hash';
+import { SCHEMA_VERSION, SchemaStatus } from './sqliteStore';
 
-/** A row returned from better-sqlite3 queries — values are SQLite primitives */
+// Minimal D1 type — avoid depending on @cloudflare/workers-types at build time
+// so this file is consumable from Node-only builds for testing too.
+interface D1Result<T = unknown> { results: T[]; success: boolean; meta: { changes?: number; last_row_id?: number } }
+interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = unknown>(): Promise<T | null>;
+  all<T = unknown>(): Promise<D1Result<T>>;
+  run(): Promise<{ success: boolean; meta: { changes?: number; last_row_id?: number } }>;
+}
+interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+  batch<T = unknown>(stmts: D1PreparedStatement[]): Promise<D1Result<T>[]>;
+}
+
+/** A row returned from D1 queries — values are SQLite primitives */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DbRow = Record<string, any>;
 
@@ -33,8 +45,6 @@ type SqlParam = string | number | boolean | null | undefined;
  * e.g. "2026-02-17T08:00:00"
  *
  * Stored datetimes are treated as local wall-clock time.
- * This avoids timezone conversion issues — 8:00 AM means 8:00 AM
- * regardless of the server or client timezone.
  */
 function toNaiveISO(date: Date): string {
   const y = date.getFullYear();
@@ -46,128 +56,39 @@ function toNaiveISO(date: Date): string {
   return `${y}-${mo}-${d}T${h}:${mi}:${s}`;
 }
 
-/**
- * Bump this version whenever the schema changes.
- * The store will compare it against the version stored in the database
- * and report a mismatch so the server can warn or rebuild.
- */
-export const SCHEMA_VERSION = 5;
-
-export interface SchemaStatus {
-  current: number;
-  expected: number;
-  match: boolean;
-  migrated: boolean;
-}
-
-/** Path to the shared schema file (used by both SqliteStore and D1). */
-const SCHEMA_SQL_PATH = path.resolve(__dirname, '..', '..', 'migrations', '0001_initial.sql');
-
-export interface SqliteStoreOptions {
-  /**
-   * Optional provider returning the number of days to shift seed timestamps
-   * by. Only the example/seed-import scripts inject this; production
-   * deployments leave it unset (default: 0).
-   */
+export interface D1StoreOptions {
   dateOffsetProvider?: () => number;
 }
 
-export class SqliteStore implements FhirStore {
-  private db: Database.Database;
+export class D1Store implements FhirStore {
+  private readonly db: D1Database;
   private readonly dateOffsetProvider: () => number;
 
-  constructor(dbPath?: string, options: SqliteStoreOptions = {}) {
-    const finalPath = dbPath || process.env.SQLITE_DB_PATH || './data/fhirtogether.db';
-
-    // Ensure directory exists
-    const dataDir = path.dirname(finalPath);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-
+  constructor(db: D1Database, options: D1StoreOptions = {}) {
+    this.db = db;
     this.dateOffsetProvider = options.dateOffsetProvider ?? (() => 0);
-    this.db = new Database(finalPath);
-    this.db.pragma('journal_mode = WAL');
   }
 
   async initialize(): Promise<SchemaStatus> {
-    // Read the stored schema version *before* applying DDL (0 = brand-new DB).
-    // We need a _meta table to exist first for the SELECT, but the schema file
-    // creates it itself with IF NOT EXISTS, so this is safe to run in order.
-    this.db.exec('CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);');
-    const row = this.db.prepare('SELECT value FROM _meta WHERE key = ?').get('schema_version') as { value: string } | undefined;
-    const dbVersion = row ? parseInt(row.value, 10) : 0;
-
-    // Apply the shared SQL schema (idempotent; uses CREATE TABLE / CREATE INDEX IF NOT EXISTS).
-    // This is the single source of truth — same file is applied to Cloudflare D1
-    // via `wrangler d1 migrations apply`.
-    const schemaSql = fs.readFileSync(SCHEMA_SQL_PATH, 'utf-8');
-    this.db.exec(schemaSql);
-
-    // ── In-place column migrations for pre-existing databases ──
-    // The schema file above creates all current columns on fresh installs.
-    // The blocks below upgrade databases created against older schemas.
-    // (D1 doesn't need these — Workers users start clean with versioned
-    // migrations; these only run when better-sqlite3 opens an existing file.)
-
-    // Migration: add identifier column if missing
-    const cols = this.db.pragma('table_info(appointments)') as { name: string }[];
-    if (!cols.some(c => c.name === 'identifier')) {
-      this.db.exec('ALTER TABLE appointments ADD COLUMN identifier TEXT');
+    try {
+      const row = await this.db.prepare('SELECT value FROM _meta WHERE key = ?').bind('schema_version').first<{ value: string }>();
+      const current = row ? parseInt(row.value, 10) : 0;
+      return {
+        current,
+        expected: SCHEMA_VERSION,
+        match: current === SCHEMA_VERSION,
+        migrated: false, // D1 never migrates inline
+      };
+    } catch {
+      // _meta table doesn't exist → migrations have not been applied
+      console.warn('⚠️  D1 schema not found. Run `wrangler d1 migrations apply` to initialize the database.');
+      return { current: 0, expected: SCHEMA_VERSION, match: false, migrated: false };
     }
-
-    // Migration v2→v3: add system_id and location_id to schedules
-    const scheduleCols = this.db.pragma('table_info(schedules)') as { name: string }[];
-    if (!scheduleCols.some(c => c.name === 'system_id')) {
-      this.db.exec('ALTER TABLE schedules ADD COLUMN system_id TEXT REFERENCES systems(id) ON DELETE CASCADE');
-      this.db.exec('ALTER TABLE schedules ADD COLUMN location_id TEXT REFERENCES locations(id) ON DELETE SET NULL');
-
-      // If there are existing schedules, create a "legacy" system and assign them
-      const existingCount = (this.db.prepare('SELECT COUNT(*) as cnt FROM schedules').get() as { cnt: number }).cnt;
-      if (existingCount > 0) {
-        const now = toNaiveISO(new Date());
-        const legacyId = `legacy-${Date.now()}`;
-        this.db.prepare(`
-          INSERT INTO systems (id, name, status, last_activity_at, created_at, ttl_days)
-          VALUES (?, ?, 'active', ?, ?, 9999)
-        `).run(legacyId, 'Legacy System', now, now);
-        this.db.prepare('UPDATE schedules SET system_id = ? WHERE system_id IS NULL').run(legacyId);
-        console.log(`\n🔄 Migration v2→v3: Created "Legacy System" (${legacyId}) for ${existingCount} existing schedules\n`);
-      }
-    }
-
-    // Migration v4→v5: add availability_template to schedules
-    const schedColsV5 = this.db.pragma('table_info(schedules)') as { name: string }[];
-    if (!schedColsV5.some(c => c.name === 'availability_template')) {
-      this.db.exec('ALTER TABLE schedules ADD COLUMN availability_template TEXT');
-    }
-
-    // Stamp the schema version after all migrations succeed
-    const migrated = dbVersion !== SCHEMA_VERSION;
-    this.db.prepare(
-      'INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-    ).run('schema_version', String(SCHEMA_VERSION));
-
-    return {
-      current: dbVersion,
-      expected: SCHEMA_VERSION,
-      match: dbVersion === SCHEMA_VERSION || dbVersion === 0, // 0 = fresh DB, always fine
-      migrated,
-    };
   }
 
   async close(): Promise<void> {
-    this.db.close();
+    // No-op on D1 — the binding lives for the lifetime of the Worker.
   }
-
-  // ==================== DATE OFFSET FOR CONSISTENT TEST DATA ====================
-  //
-  // Seed-data scripts inject a `dateOffsetProvider` via constructor options
-  // so seed timestamps stay "current" relative to today. Production
-  // deployments leave the provider unset (returns 0 → no shift). The
-  // seed-metadata file itself is handled by `src/examples/seedMetadata.ts`
-  // — it lives outside the storage layer because it's a Node-only
-  // deployment concern, not a database concern.
 
   // ==================== SYNAPSE SYSTEM OPERATIONS ====================
 
@@ -175,10 +96,10 @@ export class SqliteStore implements FhirStore {
     const id = this.generateId();
     const now = toNaiveISO(new Date());
 
-    this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO systems (id, name, url, api_key_hash, msh_application, msh_facility, msh_secret_hash, challenge_token, status, last_activity_at, created_at, ttl_days)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `).bind(
       id,
       system.name,
       system.url || null,
@@ -191,7 +112,7 @@ export class SqliteStore implements FhirStore {
       now,
       now,
       system.ttlDays,
-    );
+    ).run();
 
     return { id, name: system.name, url: system.url, mshApplication: system.mshApplication, mshFacility: system.mshFacility, status: system.status, lastActivityAt: now, createdAt: now, ttlDays: system.ttlDays };
   }
@@ -201,33 +122,33 @@ export class SqliteStore implements FhirStore {
 
     if (existing) {
       // Verify secret matches
-      const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
-      const row = this.db.prepare('SELECT msh_secret_hash FROM systems WHERE id = ?').get(existing.id) as { msh_secret_hash: string } | undefined;
+      const secretHash = await sha256Hex(secret);
+      const row = await this.db.prepare('SELECT msh_secret_hash FROM systems WHERE id = ?').bind(existing.id).first<{ msh_secret_hash: string }>();
       const storedHash = row?.msh_secret_hash;
 
       if (!storedHash) {
         // First time setting a secret for this system (e.g., legacy system)
-        this.db.prepare('UPDATE systems SET msh_secret_hash = ? WHERE id = ?').run(secretHash, existing.id);
+        await this.db.prepare('UPDATE systems SET msh_secret_hash = ? WHERE id = ?').bind(secretHash, existing.id).run();
         await this.updateSystemActivity(existing.id);
         // Issue a fresh API key on every successful HL7 auth (MSH-8 verified)
-        const apiKey = this.issueApiKey(existing.id);
+        const apiKey = await this.issueApiKey(existing.id);
         return { system: existing, isNew: false, secretMatch: true, apiKey };
       }
 
-      const match = crypto.timingSafeEqual(Buffer.from(secretHash), Buffer.from(storedHash));
+      const match = timingSafeEqualHex(secretHash, storedHash);
       if (match) {
         await this.updateSystemActivity(existing.id);
         // Issue a fresh API key on every successful HL7 auth (MSH-8 verified)
-        const apiKey = this.issueApiKey(existing.id);
+        const apiKey = await this.issueApiKey(existing.id);
         return { system: existing, isNew: false, secretMatch: match, apiKey };
       }
       return { system: existing, isNew: false, secretMatch: match };
     }
 
     // Create new system — generate API key at creation time
-    const secretHash = secret ? crypto.createHash('sha256').update(secret).digest('hex') : undefined;
-    const apiKey = crypto.randomBytes(32).toString('hex');
-    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+    const secretHash = secret ? await sha256Hex(secret) : undefined;
+    const apiKey = randomHex(32);
+    const apiKeyHash = await sha256Hex(apiKey);
     const defaultTtl = parseInt(process.env.SYSTEM_TTL_DAYS || '7', 10);
     const system = await this.createSystem({
       name: `${application}@${facility}`,
@@ -246,30 +167,30 @@ export class SqliteStore implements FhirStore {
    * Generate a new API key for a system and store the hash.
    * Returns the raw key (only time it's available in plaintext).
    */
-  private issueApiKey(systemId: string): string {
-    const apiKey = crypto.randomBytes(32).toString('hex');
-    const hash = crypto.createHash('sha256').update(apiKey).digest('hex');
-    this.db.prepare('UPDATE systems SET api_key_hash = ? WHERE id = ?').run(hash, systemId);
+  private async issueApiKey(systemId: string): Promise<string> {
+    const apiKey = randomHex(32);
+    const hash = await sha256Hex(apiKey);
+    await this.db.prepare('UPDATE systems SET api_key_hash = ? WHERE id = ?').bind(hash, systemId).run();
     return apiKey;
   }
 
   async getSystemById(id: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE id = ?').get(id) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM systems WHERE id = ?').bind(id).first<DbRow>();
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByUrl(url: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE url = ?').get(url) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM systems WHERE url = ?').bind(url).first<DbRow>();
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByMsh(application: string, facility: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE msh_application = ? AND msh_facility = ?').get(application, facility) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM systems WHERE msh_application = ? AND msh_facility = ?').bind(application, facility).first<DbRow>();
     return row ? this.rowToSystem(row) : undefined;
   }
 
   async getSystemByApiKeyHash(hash: string): Promise<SynapseSystem | undefined> {
-    const row = this.db.prepare('SELECT * FROM systems WHERE api_key_hash = ?').get(hash) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM systems WHERE api_key_hash = ?').bind(hash).first<DbRow>();
     return row ? this.rowToSystem(row) : undefined;
   }
 
@@ -289,7 +210,7 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as DbRow[];
+    const rows = (await this.db.prepare(sql).bind(...params).all<DbRow>()).results;
     return rows.map(row => this.rowToSystem(row));
   }
 
@@ -310,36 +231,38 @@ export class SqliteStore implements FhirStore {
     if (setClauses.length === 0) return existing;
 
     params.push(id);
-    this.db.prepare(`UPDATE systems SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+    await this.db.prepare(`UPDATE systems SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
 
     return (await this.getSystemById(id))!;
   }
 
   async updateSystemActivity(id: string): Promise<void> {
     const now = toNaiveISO(new Date());
-    this.db.prepare('UPDATE systems SET last_activity_at = ? WHERE id = ?').run(now, id);
+    await this.db.prepare('UPDATE systems SET last_activity_at = ? WHERE id = ?').bind(now, id).run();
   }
 
   async deleteSystem(id: string): Promise<void> {
-    this.db.prepare('DELETE FROM systems WHERE id = ?').run(id);
+    await this.db.prepare('DELETE FROM systems WHERE id = ?').bind(id).run();
   }
 
   async getSystemChallengeToken(id: string): Promise<string | undefined> {
-    const row = this.db.prepare('SELECT challenge_token FROM systems WHERE id = ?').get(id) as { challenge_token: string | null } | undefined;
+    const row = await this.db.prepare('SELECT challenge_token FROM systems WHERE id = ?').bind(id).first<{ challenge_token: string | null }>();
     return row?.challenge_token || undefined;
   }
 
   async evaporateExpiredSystems(): Promise<{ count: number; systems: Array<{ id: string; name: string; mshApplication?: string; mshFacility?: string }> }> {
     // Find expired systems: last_activity_at + ttl_days < now
-    const rows = this.db.prepare(`
+    const rows = (await this.db.prepare(`
       SELECT id, name, msh_application, msh_facility FROM systems
       WHERE status != 'expired'
         AND datetime(last_activity_at, '+' || ttl_days || ' days') < datetime('now', 'localtime')
-    `).all() as Array<{ id: string; name: string; msh_application: string | null; msh_facility: string | null }>;
+    `).bind().all<{ id: string; name: string; msh_application: string | null; msh_facility: string | null }>()).results;
 
-    for (const row of rows) {
-      // Cascade delete handles locations → schedules → slots → appointments
-      this.db.prepare('DELETE FROM systems WHERE id = ?').run(row.id);
+    if (rows.length > 0) {
+      const deleteStmts = rows.map(row =>
+        this.db.prepare('DELETE FROM systems WHERE id = ?').bind(row.id)
+      );
+      await this.db.batch(deleteStmts);
     }
 
     return {
@@ -354,10 +277,10 @@ export class SqliteStore implements FhirStore {
     const id = this.generateId();
     const now = toNaiveISO(new Date());
 
-    this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO locations (id, system_id, name, address, city, state, zip, phone, hl7_location_id, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `).bind(
       id,
       location.systemId,
       location.name,
@@ -368,16 +291,16 @@ export class SqliteStore implements FhirStore {
       location.phone || null,
       location.hl7LocationId || null,
       now,
-    );
+    ).run();
 
     return { ...location, id, createdAt: now };
   }
 
   async findOrCreateLocationByHL7(systemId: string, hl7LocationId: string, name: string, address?: string): Promise<SynapseLocation> {
     // Look up by system + HL7 location ID
-    const existing = this.db.prepare(
+    const existing = await this.db.prepare(
       'SELECT * FROM locations WHERE system_id = ? AND hl7_location_id = ?'
-    ).get(systemId, hl7LocationId) as DbRow | undefined;
+    ).bind(systemId, hl7LocationId).first<DbRow>();
 
     if (existing) return this.rowToLocation(existing);
 
@@ -410,12 +333,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as DbRow[];
+    const rows = (await this.db.prepare(sql).bind(...params).all<DbRow>()).results;
     return rows.map(row => this.rowToLocation(row));
   }
 
   async getLocationById(id: string): Promise<SynapseLocation | undefined> {
-    const row = this.db.prepare('SELECT * FROM locations WHERE id = ?').get(id) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM locations WHERE id = ?').bind(id).first<DbRow>();
     return row ? this.rowToLocation(row) : undefined;
   }
 
@@ -436,13 +359,13 @@ export class SqliteStore implements FhirStore {
     if (setClauses.length === 0) return existing;
 
     params.push(id);
-    this.db.prepare(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = ?`).run(...params);
+    await this.db.prepare(`UPDATE locations SET ${setClauses.join(', ')} WHERE id = ?`).bind(...params).run();
 
     return (await this.getLocationById(id))!;
   }
 
   async deleteLocation(id: string): Promise<void> {
-    this.db.prepare('DELETE FROM locations WHERE id = ?').run(id);
+    await this.db.prepare('DELETE FROM locations WHERE id = ?').bind(id).run();
   }
 
   // ==================== SCHEDULE OPERATIONS ====================
@@ -451,29 +374,27 @@ export class SqliteStore implements FhirStore {
     const id = schedule.id || this.generateId();
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO schedules (
         id, active, service_category, service_type, specialty, actor,
         planning_horizon_start, planning_horizon_end, comment, meta_last_updated,
         system_id, location_id, availability_template
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
+    `).bind(
       id,
       schedule.active ? 1 : 0,
       JSON.stringify(schedule.serviceCategory || []),
       JSON.stringify(schedule.serviceType || []),
       JSON.stringify(schedule.specialty || []),
       JSON.stringify(schedule.actor),
-      schedule.planningHorizon?.start,
-      schedule.planningHorizon?.end,
-      schedule.comment,
+      schedule.planningHorizon?.start || null,
+      schedule.planningHorizon?.end || null,
+      schedule.comment || null,
       now,
       schedule.system_id || null,
       schedule.location_id || null,
       schedule.availability_template || null,
-    );
+    ).run();
 
     return { ...schedule, id, meta: { lastUpdated: now } };
   }
@@ -507,12 +428,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as DbRow[];
+    const rows = (await this.db.prepare(sql).bind(...params).all<DbRow>()).results;
     return rows.map((row) => this.rowToSchedule(row));
   }
 
   async getScheduleById(id: string): Promise<Schedule | null> {
-    const row = this.db.prepare('SELECT * FROM schedules WHERE id = ?').get(id) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM schedules WHERE id = ?').bind(id).first<DbRow>();
     return row ? this.rowToSchedule(row) : null;
   }
 
@@ -523,71 +444,43 @@ export class SqliteStore implements FhirStore {
     const updated = { ...existing, ...schedule, id };
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       UPDATE schedules SET
         active = ?, service_category = ?, service_type = ?, specialty = ?,
         actor = ?, planning_horizon_start = ?, planning_horizon_end = ?,
         comment = ?, meta_last_updated = ?
       WHERE id = ?
-    `);
-
-    stmt.run(
+    `).bind(
       updated.active ? 1 : 0,
       JSON.stringify(updated.serviceCategory || []),
       JSON.stringify(updated.serviceType || []),
       JSON.stringify(updated.specialty || []),
       JSON.stringify(updated.actor),
-      updated.planningHorizon?.start,
-      updated.planningHorizon?.end,
-      updated.comment,
+      updated.planningHorizon?.start || null,
+      updated.planningHorizon?.end || null,
+      updated.comment || null,
       now,
       id
-    );
+    ).run();
 
     return { ...updated, meta: { lastUpdated: now } };
   }
 
   async deleteSchedule(id: string): Promise<void> {
-    this.db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
+    await this.db.prepare('DELETE FROM schedules WHERE id = ?').bind(id).run();
   }
 
   async deleteAllSchedules(): Promise<void> {
-    this.db.prepare('DELETE FROM schedules').run();
+    await this.db.prepare('DELETE FROM schedules').bind().run();
   }
 
   async setAvailabilityTemplate(scheduleId: string, template: string | null): Promise<void> {
-    this.db.prepare('UPDATE schedules SET availability_template = ? WHERE id = ?').run(template, scheduleId);
+    await this.db.prepare('UPDATE schedules SET availability_template = ? WHERE id = ?').bind(template, scheduleId).run();
   }
 
   async getAvailabilityTemplate(scheduleId: string): Promise<string | null> {
-    const row = this.db.prepare('SELECT availability_template FROM schedules WHERE id = ?').get(scheduleId) as { availability_template: string | null } | undefined;
+    const row = await this.db.prepare('SELECT availability_template FROM schedules WHERE id = ?').bind(scheduleId).first<{ availability_template: string | null }>();
     return row?.availability_template ?? null;
-  }
-
-  /**
-   * Import a raw schedule row from seed data (bypasses normal creation logic)
-   */
-  async importScheduleRow(row: DbRow): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT INTO schedules (
-        id, active, service_category, service_type, specialty, actor,
-        planning_horizon_start, planning_horizon_end, comment, meta_last_updated, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      row.id,
-      row.active,
-      row.service_category,
-      row.service_type,
-      row.specialty,
-      row.actor,
-      row.planning_horizon_start,
-      row.planning_horizon_end,
-      row.comment,
-      row.meta_last_updated,
-      row.created_at
-    );
   }
 
   // ==================== SLOT OPERATIONS ====================
@@ -596,16 +489,14 @@ export class SqliteStore implements FhirStore {
     const id = slot.id || this.generateId();
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    const scheduleId = this.extractId(slot.schedule.reference);
+
+    await this.db.prepare(`
       INSERT INTO slots (
         id, schedule_id, status, start, end, service_category, service_type,
         specialty, appointment_type, overbooked, comment, meta_last_updated
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    const scheduleId = this.extractId(slot.schedule.reference);
-
-    stmt.run(
+    `).bind(
       id,
       scheduleId,
       slot.status,
@@ -616,9 +507,9 @@ export class SqliteStore implements FhirStore {
       JSON.stringify(slot.specialty || []),
       JSON.stringify(slot.appointmentType),
       slot.overbooked ? 1 : 0,
-      slot.comment,
+      slot.comment || null,
       now
-    );
+    ).run();
 
     return { ...slot, id, meta: { lastUpdated: now } };
   }
@@ -667,12 +558,12 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as DbRow[];
+    const rows = (await this.db.prepare(sql).bind(...params).all<DbRow>()).results;
     return rows.map((row) => this.rowToSlot(row));
   }
 
   async getSlotById(id: string): Promise<Slot | null> {
-    const row = this.db.prepare('SELECT * FROM slots WHERE id = ?').get(id) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM slots WHERE id = ?').bind(id).first<DbRow>();
     return row ? this.rowToSlot(row) : null;
   }
 
@@ -683,15 +574,13 @@ export class SqliteStore implements FhirStore {
     const updated = { ...existing, ...slot, id };
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       UPDATE slots SET
         status = ?, start = ?, end = ?, service_category = ?, service_type = ?,
         specialty = ?, appointment_type = ?, overbooked = ?, comment = ?,
         meta_last_updated = ?
       WHERE id = ?
-    `);
-
-    stmt.run(
+    `).bind(
       updated.status,
       updated.start,
       updated.end,
@@ -700,53 +589,50 @@ export class SqliteStore implements FhirStore {
       JSON.stringify(updated.specialty || []),
       JSON.stringify(updated.appointmentType),
       updated.overbooked ? 1 : 0,
-      updated.comment,
+      updated.comment || null,
       now,
       id
-    );
+    ).run();
 
     return { ...updated, meta: { lastUpdated: now } };
   }
 
   async deleteSlot(id: string): Promise<void> {
-    this.db.prepare('DELETE FROM slots WHERE id = ?').run(id);
+    await this.db.prepare('DELETE FROM slots WHERE id = ?').bind(id).run();
   }
 
   async deleteAllSlots(): Promise<void> {
-    this.db.prepare('DELETE FROM slots').run();
+    await this.db.prepare('DELETE FROM slots').bind().run();
   }
 
   async createSlots(slots: Omit<Slot, 'id' | 'meta'>[]): Promise<{ count: number }> {
     const now = toNaiveISO(new Date());
-    const stmt = this.db.prepare(`
-      INSERT INTO slots (
-        id, schedule_id, status, start, end, service_category, service_type,
-        specialty, appointment_type, overbooked, comment, meta_last_updated
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
 
-    const insertAll = this.db.transaction((items: Omit<Slot, 'id' | 'meta'>[]) => {
-      for (const slot of items) {
-        const id = this.generateId();
-        const scheduleId = this.extractId(slot.schedule.reference);
-        stmt.run(
-          id,
-          scheduleId,
-          slot.status,
-          slot.start,
-          slot.end,
-          JSON.stringify(slot.serviceCategory || []),
-          JSON.stringify(slot.serviceType || []),
-          JSON.stringify(slot.specialty || []),
-          JSON.stringify(slot.appointmentType),
-          slot.overbooked ? 1 : 0,
-          slot.comment,
-          now,
-        );
-      }
+    const stmts = slots.map((slot) => {
+      const id = this.generateId();
+      const scheduleId = this.extractId(slot.schedule.reference);
+      return this.db.prepare(`
+        INSERT INTO slots (
+          id, schedule_id, status, start, end, service_category, service_type,
+          specialty, appointment_type, overbooked, comment, meta_last_updated
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        scheduleId,
+        slot.status,
+        slot.start,
+        slot.end,
+        JSON.stringify(slot.serviceCategory || []),
+        JSON.stringify(slot.serviceType || []),
+        JSON.stringify(slot.specialty || []),
+        JSON.stringify(slot.appointmentType),
+        slot.overbooked ? 1 : 0,
+        slot.comment || null,
+        now,
+      );
     });
 
-    insertAll(slots);
+    await this.db.batch(stmts);
     return { count: slots.length };
   }
 
@@ -757,36 +643,8 @@ export class SqliteStore implements FhirStore {
       sql += ' AND status = ?';
       params.push(statusFilter);
     }
-    const result = this.db.prepare(sql).run(...params);
-    return result.changes;
-  }
-
-  /**
-   * Import a raw slot row from seed data (bypasses normal creation logic)
-   */
-  async importSlotRow(row: DbRow): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT INTO slots (
-        id, schedule_id, status, start, end, service_category, service_type,
-        specialty, appointment_type, overbooked, comment, meta_last_updated, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      row.id,
-      row.schedule_id,
-      row.status,
-      row.start,
-      row.end,
-      row.service_category,
-      row.service_type,
-      row.specialty,
-      row.appointment_type,
-      row.overbooked,
-      row.comment,
-      row.meta_last_updated,
-      row.created_at
-    );
+    const result = await this.db.prepare(sql).bind(...params).run();
+    return result.meta.changes ?? 0;
   }
 
   // ==================== APPOINTMENT OPERATIONS ====================
@@ -795,16 +653,14 @@ export class SqliteStore implements FhirStore {
     const id = appointment.id || this.generateId();
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO appointments (
         id, status, identifier, cancelation_reason, service_category, service_type,
         specialty, appointment_type, reason_code, priority, description,
         slot_refs, start, end, created, comment, patient_instruction,
         participant, meta_last_updated
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
+    `).bind(
       id,
       appointment.status,
       JSON.stringify(appointment.identifier || []),
@@ -814,17 +670,17 @@ export class SqliteStore implements FhirStore {
       JSON.stringify(appointment.specialty || []),
       JSON.stringify(appointment.appointmentType),
       JSON.stringify(appointment.reasonCode || []),
-      appointment.priority,
-      appointment.description,
+      appointment.priority || null,
+      appointment.description || null,
       JSON.stringify(appointment.slot || []),
-      appointment.start,
-      appointment.end,
+      appointment.start || null,
+      appointment.end || null,
       appointment.created || now,
-      appointment.comment,
-      appointment.patientInstruction,
+      appointment.comment || null,
+      appointment.patientInstruction || null,
       JSON.stringify(appointment.participant),
       now
-    );
+    ).run();
 
     // Update slot status to busy
     if (appointment.slot && appointment.slot.length > 0) {
@@ -877,18 +733,18 @@ export class SqliteStore implements FhirStore {
       params.push(query._count);
     }
 
-    const rows = this.db.prepare(sql).all(...params) as DbRow[];
+    const rows = (await this.db.prepare(sql).bind(...params).all<DbRow>()).results;
     return rows.map((row) => this.rowToAppointment(row));
   }
 
   async getAppointmentById(id: string): Promise<Appointment | null> {
-    const row = this.db.prepare('SELECT * FROM appointments WHERE id = ?').get(id) as DbRow | undefined;
+    const row = await this.db.prepare('SELECT * FROM appointments WHERE id = ?').bind(id).first<DbRow>();
     return row ? this.rowToAppointment(row) : null;
   }
 
   async getAppointmentByIdentifier(system: string, value: string): Promise<Appointment | null> {
     // Search through appointments to find one with matching identifier
-    const rows = this.db.prepare('SELECT * FROM appointments').all() as any[];
+    const rows = (await this.db.prepare('SELECT * FROM appointments').bind().all<DbRow>()).results;
     for (const row of rows) {
       const identifiers = this.parseJson(row.identifier) as Array<{ system?: string; value: string }> | undefined;
       if (identifiers) {
@@ -910,33 +766,31 @@ export class SqliteStore implements FhirStore {
     const updated = { ...existing, ...appointment, id };
     const now = toNaiveISO(new Date());
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       UPDATE appointments SET
         status = ?, cancelation_reason = ?, description = ?, start = ?,
         end = ?, comment = ?, participant = ?, identifier = ?,
         meta_last_updated = ?
       WHERE id = ?
-    `);
-
-    stmt.run(
+    `).bind(
       updated.status,
       JSON.stringify(updated.cancelationReason),
-      updated.description,
-      updated.start,
-      updated.end,
-      updated.comment,
+      updated.description || null,
+      updated.start || null,
+      updated.end || null,
+      updated.comment || null,
       JSON.stringify(updated.participant),
       JSON.stringify(updated.identifier || null),
       now,
       id
-    );
+    ).run();
 
     return { ...updated, meta: { lastUpdated: now } };
   }
 
   async deleteAppointment(id: string): Promise<void> {
     const appointment = await this.getAppointmentById(id);
-    
+
     // Free up slots
     if (appointment?.slot) {
       for (const slotRef of appointment.slot) {
@@ -945,47 +799,11 @@ export class SqliteStore implements FhirStore {
       }
     }
 
-    this.db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+    await this.db.prepare('DELETE FROM appointments WHERE id = ?').bind(id).run();
   }
 
   async deleteAllAppointments(): Promise<void> {
-    this.db.prepare('DELETE FROM appointments').run();
-  }
-
-  /**
-   * Import a raw appointment row from seed data (bypasses normal creation logic)
-   */
-  async importAppointmentRow(row: DbRow): Promise<void> {
-    const stmt = this.db.prepare(`
-      INSERT INTO appointments (
-        id, status, cancelation_reason, service_category, service_type,
-        specialty, appointment_type, reason_code, priority, description,
-        slot_refs, start, end, created, comment, patient_instruction,
-        participant, meta_last_updated, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      row.id,
-      row.status,
-      row.cancelation_reason,
-      row.service_category,
-      row.service_type,
-      row.specialty,
-      row.appointment_type,
-      row.reason_code,
-      row.priority,
-      row.description,
-      row.slot_refs,
-      row.start,
-      row.end,
-      row.created,
-      row.comment,
-      row.patient_instruction,
-      row.participant,
-      row.meta_last_updated,
-      row.created_at
-    );
+    await this.db.prepare('DELETE FROM appointments').bind().run();
   }
 
   // ==================== SLOT HOLD OPERATIONS ====================
@@ -1009,24 +827,24 @@ export class SqliteStore implements FhirStore {
       // If the hold is from the same session, extend it
       if (existingHold.sessionId === sessionId) {
         const newExpiry = toNaiveISO(new Date(Date.now() + durationMinutes * 60 * 1000));
-        this.db.prepare('UPDATE slot_holds SET expires_at = ? WHERE id = ?').run(newExpiry, existingHold.id);
+        await this.db.prepare('UPDATE slot_holds SET expires_at = ? WHERE id = ?').bind(newExpiry, existingHold.id).run();
         return { ...existingHold, expiresAt: newExpiry };
       }
       throw new Error(`Slot ${slotId} is already held by another user`);
     }
 
-    // Create new hold
+    // Create new hold. Hold tokens are bearer credentials — anyone with
+    // the token can release the hold — so they must be unguessable.
+    // Use cryptographically-secure random bytes (16 = 128 bits of entropy).
     const id = this.generateId();
-    const holdToken = `hold-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const holdToken = `hold-${randomHex(16)}`;
     const now = toNaiveISO(new Date());
     const expiresAt = toNaiveISO(new Date(Date.now() + durationMinutes * 60 * 1000));
 
-    const stmt = this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO slot_holds (id, slot_id, hold_token, session_id, expires_at, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(id, slotId, holdToken, sessionId, expiresAt, now);
+    `).bind(id, slotId, holdToken, sessionId, expiresAt, now).run();
 
     return {
       id,
@@ -1039,45 +857,45 @@ export class SqliteStore implements FhirStore {
   }
 
   async releaseHold(holdToken: string): Promise<void> {
-    this.db.prepare('DELETE FROM slot_holds WHERE hold_token = ?').run(holdToken);
+    await this.db.prepare('DELETE FROM slot_holds WHERE hold_token = ?').bind(holdToken).run();
   }
 
   async getActiveHold(slotId: string): Promise<SlotHold | null> {
     const now = toNaiveISO(new Date());
-    const row = this.db.prepare(
+    const row = await this.db.prepare(
       'SELECT * FROM slot_holds WHERE slot_id = ? AND expires_at > ?'
-    ).get(slotId, now) as DbRow | undefined;
+    ).bind(slotId, now).first<DbRow>();
 
     return row ? this.rowToSlotHold(row) : null;
   }
 
   async getHoldByToken(holdToken: string): Promise<SlotHold | null> {
-    const row = this.db.prepare(
+    const row = await this.db.prepare(
       'SELECT * FROM slot_holds WHERE hold_token = ?'
-    ).get(holdToken) as DbRow | undefined;
+    ).bind(holdToken).first<DbRow>();
 
     return row ? this.rowToSlotHold(row) : null;
   }
 
   async cleanupExpiredHolds(): Promise<number> {
     const now = toNaiveISO(new Date());
-    const result = this.db.prepare('DELETE FROM slot_holds WHERE expires_at <= ?').run(now);
-    return result.changes;
+    const result = await this.db.prepare('DELETE FROM slot_holds WHERE expires_at <= ?').bind(now).run();
+    return result.meta.changes ?? 0;
   }
 
   async clearAllHolds(): Promise<number> {
-    const result = this.db.prepare('DELETE FROM slot_holds').run();
-    return result.changes;
+    const result = await this.db.prepare('DELETE FROM slot_holds').bind().run();
+    return result.meta.changes ?? 0;
   }
 
   // ==================== HL7 MESSAGE LOG OPERATIONS ====================
 
   async logHL7Message(entry: Omit<HL7MessageLogEntry, 'id'>): Promise<HL7MessageLogEntry> {
     const id = this.generateId();
-    this.db.prepare(`
+    await this.db.prepare(`
       INSERT INTO hl7_message_log (id, received_at, source, remote_address, message_type, trigger_event, control_id, raw_message, ack_response, ack_code, processing_ms)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `).bind(
       id,
       entry.receivedAt,
       entry.source,
@@ -1089,7 +907,7 @@ export class SqliteStore implements FhirStore {
       entry.ackResponse || null,
       entry.ackCode || null,
       entry.processingMs ?? null,
-    );
+    ).run();
     return { id, ...entry };
   }
 
@@ -1117,9 +935,9 @@ export class SqliteStore implements FhirStore {
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const limit = query?._count ?? 100;
 
-    const rows = this.db.prepare(
+    const rows = (await this.db.prepare(
       `SELECT * FROM hl7_message_log ${where} ORDER BY received_at DESC LIMIT ?`
-    ).all(...params, limit) as DbRow[];
+    ).bind(...params, limit).all<DbRow>()).results;
 
     return rows.map(row => this.rowToHL7LogEntry(row));
   }
@@ -1128,14 +946,14 @@ export class SqliteStore implements FhirStore {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - retentionDays);
     const cutoffStr = toNaiveISO(cutoff);
-    const result = this.db.prepare('DELETE FROM hl7_message_log WHERE received_at < ?').run(cutoffStr);
-    return result.changes;
+    const result = await this.db.prepare('DELETE FROM hl7_message_log WHERE received_at < ?').bind(cutoffStr).run();
+    return result.meta.changes ?? 0;
   }
 
   // ==================== HELPER METHODS ====================
 
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   private extractId(reference: string): string {
