@@ -169,6 +169,8 @@ An embeddable [FHIR Scheduler React component](packages/fhir-scheduler/) for bro
 
 ### Provider View: Duplicate Appointment Rendering Fix (Before/After)
 
+Previously, provider view could render both an appointment and its consumed busy slot, showing the same booked time twice. The fix keeps only the appointment entry for booked times.
+
 | Before | After |
 |--------|-------|
 | ![Provider view before duplicate appointment-rendering fix](packages/fhir-scheduler/docs/screenshots/provider-appointments-before.png) | ![Provider view after duplicate appointment-rendering fix](packages/fhir-scheduler/docs/screenshots/provider-appointments-after.png) |
