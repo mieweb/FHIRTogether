@@ -71,6 +71,7 @@ function ProviderView() {
           Import Data
         </button>
         <button
+          id="tab-synchronize"
           type="button"
           role="tab"
           aria-selected={activeTab === 'synchronize'}
