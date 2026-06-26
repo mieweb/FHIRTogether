@@ -167,6 +167,12 @@ We have an Enterprise Health EHR and WebChart EHR sandbox environment available 
 
 An embeddable [FHIR Scheduler React component](packages/fhir-scheduler/) for browsing provider availability and booking appointments. See the [package README](packages/fhir-scheduler/README.md) for usage and integration details.
 
+### Provider View: duplicate booked cards fix (before/after)
+
+| Before | After |
+|--------|-------|
+| ![Provider view before de-duplication](packages/fhir-scheduler/docs/screenshots/provider-appointments-before.png) | ![Provider view after de-duplication](packages/fhir-scheduler/docs/screenshots/provider-appointments-after.png) |
+
 ---
 
 ## 🛠 Use Case: Making Legacy Systems FHIR-Compliant
