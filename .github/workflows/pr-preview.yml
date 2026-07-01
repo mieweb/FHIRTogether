@@ -31,8 +31,14 @@ jobs:
 
           RESPONSE=$(curl -s -H "Authorization: Bearer $API_KEY" -H "Accept: application/json" \
             "$API_URL/sites/1/containers?hostname=$CONTAINER_NAME")
-          CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.containers[0].id // empty')
-          CONTAINER_STATUS=$(echo "$RESPONSE" | jq -r '.containers[0].status // empty')
+          if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
+            echo "Launchpad API returned non-JSON response; skipping cleanup."
+            CONTAINER_ID=""
+            CONTAINER_STATUS=""
+          else
+            CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.containers[0].id // empty')
+            CONTAINER_STATUS=$(echo "$RESPONSE" | jq -r '.containers[0].status // empty')
+          fi
 
           if [[ -n "$CONTAINER_ID" && "$CONTAINER_STATUS" == "failed" ]]; then
             echo "Deleting failed container $CONTAINER_NAME (ID: $CONTAINER_ID)..."

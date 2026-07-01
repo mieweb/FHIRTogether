@@ -159,6 +159,7 @@ src/
 - Keep documentation DRY (Don't Repeat Yourself) - reference other docs instead of duplicating
 - Use clear cross-references between related documentation files
 - Update the main architecture document when workflow structure changes
+- For screenshot docs, include per-image metadata (file path, feature/screen, source page/route, viewport/device, capture date, and update triggers) so automated agents can identify stale screenshots.
 
 ## Working with GitHub Actions Workflows
 
@@ -170,13 +171,13 @@ src/
 
 ## Quick Reference
 
-### 🪶 All Changes should be considered for Pull Request Philosophy
-
-* **Smallest viable change**: Always make the smallest change that fully solves the problem.
-* **Fewest files first**: Start with the minimal number of files required.
-* **No sweeping edits**: Broad refactors or multi-module changes must be split or proposed as new components.
-* **Isolated improvements**: If a change grows complex, extract it into a new function, module, or component instead of modifying multiple areas.
-* **Direct requests only**: Large refactors or architectural shifts should only occur when explicitly requested.
+### 🪶 PR Checklist
+- [ ] **Smallest viable change**: Always make the smallest change that fully solves the problem.
+- [ ] **Fewest files first**: Start with the minimal number of files required.
+- [ ] **No sweeping edits**: Broad refactors or multi-module changes must be split or proposed as new components.
+- [ ] **Isolated improvements**: If a change grows complex, extract it into a new function, module, or component instead of modifying multiple areas.
+- [ ] **Direct requests only**: Large refactors or architectural shifts should only occur when explicitly requested.
+- [ ] **Documentation updates**: Update relevant documentation when changes affect workflows, APIs, or user-facing features, especially screenshots with before/after images.  Every screenshot should include metadata that will help define whetever the screenshoot should be recaptured: file path, feature/screen, source page/route, viewport/device, capture date. If screenshot documentation does not exist, create a new doc with screenshots and reference it in the PR description.
 
 ### Code Quality Checklist
 - [ ] **DRY**: No code duplication - extracted reusable functions?
@@ -189,6 +190,7 @@ src/
 - [ ] **I18N**: User-facing text externalized for translation?
 - [ ] **Lint**: Run linter if appropriate
 - [ ] **Test**: Run tests
+- [ ] **PR Checklist**: Ensure PR meets all requirements before requesting review
 
 ## FHIRTogether-Specific Guidelines
 
