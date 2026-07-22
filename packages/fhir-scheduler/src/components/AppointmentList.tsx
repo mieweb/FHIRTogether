@@ -274,13 +274,13 @@ export function AppointmentList({ fhirBaseUrl, initialScheduleId, initialDate, c
       try {
         const practitionerRef = selectedProvider!.actor?.[0]?.reference || `Schedule/${selectedProvider!.id}`;
         const scheduleId = selectedProvider!.id!;
-        
+
         // Fetch appointments day-by-day
         const startDate = new Date(dateRange.start + 'T00:00:00');
         const endDate = new Date(dateRange.end + 'T23:59:59');
         const allAppointments: Appointment[] = [];
         const current = new Date(startDate);
-        
+
         while (current <= endDate) {
           const dateStr = toDateString(current);
           const params = new URLSearchParams({ date: dateStr, actor: practitionerRef });
@@ -316,13 +316,28 @@ export function AppointmentList({ fhirBaseUrl, initialScheduleId, initialDate, c
     fetchData();
   }, [selectedProvider, dateRange, fhirBaseUrl, headers]);
 
-  // Merge appointments and slots into a unified timeline
+  // Merge appointments and slots into a unified timeline.
+  // Suppress slots that an appointment already consumes — otherwise every booked
+  // appointment would render twice (once as "Blocked", once as the underlying "Busy" slot).
   const timeline = useMemo<TimelineEntry[]>(() => {
+    const consumedSlotIds = new Set<string>();
+    const consumedSlotTimes = new Set<string>();
+    for (const appt of appointments) {
+      for (const ref of appt.slot ?? []) {
+        const id = ref.reference?.split('/').pop();
+        if (id) consumedSlotIds.add(id);
+      }
+      if (appt.start && appt.end) {
+        consumedSlotTimes.add(`${appt.start}|${appt.end}`);
+      }
+    }
     const entries: TimelineEntry[] = [];
     for (const appt of appointments) {
       entries.push({ kind: 'appointment', data: appt });
     }
     for (const slot of slots) {
+      if (slot.id && consumedSlotIds.has(slot.id)) continue;
+      if (consumedSlotTimes.has(`${slot.start}|${slot.end}`)) continue;
       entries.push({ kind: 'slot', data: slot });
     }
     return entries;
@@ -342,7 +357,7 @@ export function AppointmentList({ fhirBaseUrl, initialScheduleId, initialDate, c
     }
     return summary;
   }, [slots]);
-  
+
   // Dates to display (either single day or week)
   const displayDates = useMemo(() => {
     if (viewMode === 'day') return [toDateString(currentDate)];

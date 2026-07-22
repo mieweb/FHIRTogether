@@ -1,0 +1,23 @@
+# systemd unit to reset the local FHIRTogether environment.
+#
+# Thin wrapper around scripts/reset.sh so the exact same steps can be run
+# locally (./scripts/reset.sh) and via systemd.
+#
+# Install (adjust User/paths if your checkout lives elsewhere):
+#   sudo cp deploy/fhirtogether-reset.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl start fhirtogether-reset.service
+
+[Unit]
+Description=Reset FHIRTogether Environment
+Requires=fhirtogether.service
+After=fhirtogether.service
+
+[Service]
+Type=oneshot
+User=monika
+WorkingDirectory=/home/monika/FHIRTogether
+ExecStart=/home/monika/FHIRTogether/scripts/reset.sh
+
+[Install]
+WantedBy=multi-user.target

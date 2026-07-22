@@ -31,6 +31,20 @@ src/
 - `npm run build` - Compile TypeScript
 - `npm start` - Run production build
 
+### Deployment
+Production runs the compiled Node.js server directly under **systemd** (not Docker).
+The unit file is [`deploy/fhirtogether.service`](../deploy/fhirtogether.service).
+
+- Install: `sudo cp deploy/fhirtogether.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable --now fhirtogether`
+- Deploy update: `git pull && npm ci && npm run build && sudo systemctl restart fhirtogether`
+- Logs: `journalctl -u fhirtogether -f`
+
+Production deploys are **manual** (the steps above) — there is no CI job that
+auto-deploys production. The `.github/workflows/pr-preview.yml` workflow still
+builds Docker images for ephemeral per-PR preview containers via launchpad; the
+`Dockerfile`/`docker-compose.yml` support those previews and local containerized
+runs. `docker-compose.inferno.yml` is the separate Inferno test harness.
+
 ### API Endpoints
 | Method | Path | Description |
 |--------|------|-------------|
